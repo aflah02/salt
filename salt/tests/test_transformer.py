@@ -135,6 +135,32 @@ def test_transformer_dict_input(num_registers):
     assert all(k in mask for k in ["m1", "m2", "m3", "REGISTERS"])
 
 
+@pytest.mark.parametrize("schedule", ["uniform", "linear"])
+def test_transformer_drop_path_schedule(schedule):
+    num_layers = 4
+    drop_path = 0.2
+    trans = Transformer(
+        num_layers=num_layers,
+        embed_dim=32,
+        attn_type="torch-math",
+        dense_kwargs={"activation": "SiLU"},
+        attn_kwargs={"num_heads": 2},
+        drop_path=drop_path,
+        drop_path_schedule=schedule,
+    )
+    rates = [layer.attn.drop_path.drop_prob for layer in trans.layers]
+    if schedule == "uniform":
+        assert all(r == drop_path for r in rates)
+    else:
+        expected = [drop_path * 0.5 * (1 + d / (num_layers - 1)) for d in range(num_layers)]
+        assert rates == pytest.approx(expected)
+
+    # forward pass still runs and is NaN-free
+    x, mask = get_self_attn_inputs(5, 10, 32, 0.5)
+    out, _ = trans(x, pad_mask=mask)
+    assert not out.isnan().any()
+
+
 def test_RMSNorm():
     rmsnorm = RMSNorm(10)
     x = torch.randn(5, 10)

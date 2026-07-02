@@ -90,6 +90,52 @@ def test_edge_attention_update_edges() -> None:
     assert ~torch.all(edge_x == edge_output)
 
 
+@pytest.mark.parametrize("talking_heads", [True, False])
+@pytest.mark.parametrize("edge_gate", [True, False])
+@pytest.mark.parametrize("mup", [True, False])
+def test_edge_attention_talking_heads_gate(talking_heads, edge_gate, mup) -> None:
+    batch_size, seq_len, embed_dim, edge_dim = 2, 10, 16, 8
+    num_heads = 4
+    attn = EdgeAttention(
+        embed_dim=embed_dim,
+        edge_embed_dim=edge_dim,
+        num_heads=num_heads,
+        talking_heads=talking_heads,
+        edge_gate=edge_gate,
+        mup=mup,
+    )
+    # the gate/talking-heads submodules only exist when requested
+    assert (attn.linear_g is not None) == edge_gate
+    assert hasattr(attn, "talking_1") == talking_heads
+    assert hasattr(attn, "talking_2") == talking_heads
+
+    x, mask, edge_x = get_inputs(batch_size, seq_len, embed_dim, edge_dim, 0.5)
+    output, edge_output = attn(x, edge_x=edge_x, mask=mask)
+    assert output.shape == (batch_size, seq_len, embed_dim)
+    assert edge_output.shape == (batch_size, seq_len, seq_len, edge_dim)
+    assert not torch.isnan(output).any()
+    assert not torch.isnan(edge_output).any()
+
+
+def test_edge_attention_talking_heads_changes_output() -> None:
+    batch_size, seq_len, embed_dim, edge_dim = 2, 8, 16, 8
+    num_heads = 4
+    x, mask, edge_x = get_inputs(batch_size, seq_len, embed_dim, edge_dim, 0.5)
+
+    torch.manual_seed(0)
+    plain = EdgeAttention(embed_dim, edge_dim, num_heads=num_heads, edge_gate=False)
+    torch.manual_seed(0)
+    talk = EdgeAttention(
+        embed_dim, edge_dim, num_heads=num_heads, edge_gate=False, talking_heads=True
+    )
+    # share the projections so only the talking-heads mixing differs
+    talk.load_state_dict(plain.state_dict(), strict=False)
+
+    out_plain, _ = plain(x, edge_x=edge_x, mask=mask)
+    out_talk, _ = talk(x, edge_x=edge_x, mask=mask)
+    assert not torch.allclose(out_plain, out_talk)
+
+
 def test_edge_attention_mup() -> None:
     batch_size, seq_len, embed_dim, edge_dim = 2, 5, 16, 8
     num_heads = 2
@@ -159,6 +205,34 @@ def test_transformer_edges(drop_registers) -> None:
     # test fully padded case
     out, _ = net(x, edge_x=edge_x, pad_mask=get_random_mask(bs, seq_len, p_valid=0.0))
     assert not torch.isnan(out).any(), "Transformer with edges forward produced NaNs"
+
+
+def test_transformer_depart_style() -> None:
+    bs, seq_len, embed_dim, edge_embed_dim = 2, 6, 16, 16
+    num_registers = 2
+    x = torch.rand(bs, seq_len, embed_dim)
+    edge_x = torch.rand(bs, seq_len, seq_len, edge_embed_dim)
+
+    # DeParT-style primitives composed through the Transformer: faithful additive-bias
+    # attention (no gate) + talking-heads + gated FFN + LayerScale + linear drop-path.
+    net = Transformer(
+        embed_dim=embed_dim,
+        edge_embed_dim=edge_embed_dim,
+        num_layers=3,
+        attn_kwargs={"num_heads": 2, "talking_heads": True, "edge_gate": False},
+        dense_kwargs={"activation": "ReLU", "gated": True},
+        ls_init=1e-5,
+        drop_path=0.1,
+        drop_path_schedule="linear",
+        num_registers=num_registers,
+    )
+    out = net(x, edge_x=edge_x, pad_mask=get_random_mask(bs, seq_len, p_valid=0.5))[0]
+    assert out.shape == (bs, seq_len + num_registers, embed_dim)
+    assert not torch.isnan(out).any()
+
+    # fully padded jets must still be NaN-free (registers guard the softmax)
+    out, _ = net(x, edge_x=edge_x, pad_mask=get_random_mask(bs, seq_len, p_valid=0.0))
+    assert not torch.isnan(out).any()
 
 
 def test_edge_updates():

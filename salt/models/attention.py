@@ -484,6 +484,13 @@ class EdgeAttention(nn.Module):
         Whether to apply RMSNorm to V per head. The default is ``False``.
     update_edges : bool, optional
         Indicate whether to update edge features, by default False
+    talking_heads : bool, optional
+        Whether to apply talking-heads attention: a learned linear mixing across
+        heads applied both before and after the softmax (DeParT). The default is ``False``.
+    edge_gate : bool, optional
+        Whether to gate the post-softmax attention weights with ``sigmoid`` of a
+        projection of the edge features. The default is ``True``. Set to ``False``
+        for the faithful ParT/DeParT additive-bias-only attention.
     mup: bool, optional
         Whether to use the muP parametrisation. The default is ``False``.
         Impacts init and scale of dot product sqrt(head_dim) -> head_dim.
@@ -500,6 +507,8 @@ class EdgeAttention(nn.Module):
         do_qk_norm: bool = False,
         do_v_norm: bool = False,
         update_edges: bool = False,
+        talking_heads: bool = False,
+        edge_gate: bool = True,
         mup: bool = False,
     ) -> None:
         super().__init__()
@@ -516,6 +525,8 @@ class EdgeAttention(nn.Module):
         self.do_qk_norm = do_qk_norm
         self.do_v_norm = do_v_norm
         self.update_edges = update_edges
+        self.talking_heads = talking_heads
+        self.edge_gate = edge_gate
         self.mup = mup
 
         self.scale = 1 / self.head_dim if mup else 1 / math.sqrt(self.head_dim)
@@ -533,7 +544,13 @@ class EdgeAttention(nn.Module):
 
         # Edge feature projections
         self.linear_e = nn.Linear(self.edge_embed_dim, self.num_heads, bias=bias)
-        self.linear_g = nn.Linear(self.edge_embed_dim, self.num_heads, bias=bias)
+        if self.edge_gate:
+            self.linear_g = nn.Linear(self.edge_embed_dim, self.num_heads, bias=bias)
+        else:
+            self.register_buffer("linear_g", None)
+        if self.talking_heads:
+            self.talking_1 = nn.Linear(self.num_heads, self.num_heads, bias=False)
+            self.talking_2 = nn.Linear(self.num_heads, self.num_heads, bias=False)
         if self.update_edges:
             self.linear_e_out = nn.Linear(self.num_heads, self.edge_embed_dim, bias=bias)
         else:
@@ -556,8 +573,14 @@ class EdgeAttention(nn.Module):
             nn.init.constant_(self.in_proj_weight[: self.embed_dim, :], 0.0)  # Q projection
             linear_layers = [self.out_proj]
             nn.init.normal_(self.linear_e.weight, std=(1.0 / self.edge_embed_dim) ** 0.5)
-            nn.init.normal_(self.linear_g.weight, std=(1.0 / self.edge_embed_dim) ** 0.5)
-            linear_layers.extend([self.linear_e, self.linear_g])
+            linear_layers.append(self.linear_e)
+            if self.edge_gate:
+                nn.init.normal_(self.linear_g.weight, std=(1.0 / self.edge_embed_dim) ** 0.5)
+                linear_layers.append(self.linear_g)
+            if self.talking_heads:
+                # heads is a fixed (non-width) dim under muP; init like a standard linear
+                nn.init.normal_(self.talking_1.weight, std=(1.0 / self.num_heads) ** 0.5)
+                nn.init.normal_(self.talking_2.weight, std=(1.0 / self.num_heads) ** 0.5)
             if self.update_edges:
                 nn.init.normal_(self.linear_e_out.weight, std=(1.0 / self.num_heads) ** 0.5)
                 linear_layers.append(self.linear_e_out)
@@ -573,13 +596,18 @@ class EdgeAttention(nn.Module):
             nn.init.constant_(self.in_proj_bias, 0.0)
 
         # Linear layers
-        layers = [self.linear_e, self.linear_g, self.out_proj]
+        layers = [self.linear_e, self.out_proj]
+        if self.edge_gate:
+            layers.append(self.linear_g)
         if self.update_edges:
             layers.append(self.linear_e_out)
         for layer in layers:
             layer.reset_parameters()
             if self.bias:
                 nn.init.constant_(layer.bias, 0.0)
+        if self.talking_heads:
+            self.talking_1.reset_parameters()
+            self.talking_2.reset_parameters()
 
     def forward(
         self,
@@ -628,9 +656,10 @@ class EdgeAttention(nn.Module):
         s_mask = mask if kv is None else kv_mask  # Who is sending, x or kv
         mask = merge_masks(s_mask, attn_mask, q.shape)
         e = self.linear_e(edge_x)  # (B, L_q, L_kv, num_heads)
-        g = functional.sigmoid(self.linear_g(edge_x))  # (B, L_q, L_kv, num_heads)
 
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # (B, num_heads, L_q, L_kv)
+        if self.talking_heads:  # mix across heads before adding the edge bias
+            attn_scores = self.talking_1(attn_scores.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         attn_scores = attn_scores + e.permute(0, 3, 1, 2)  # add edge embeddings
 
         if self.dropout > 0.0 and self.training:
@@ -650,7 +679,12 @@ class EdgeAttention(nn.Module):
         )
         attn_weights = torch.softmax(masked_scores, dim=-1)  # (B, num_heads, L_q, L_kv)
 
-        attn_weights = attn_weights * g.permute(0, 3, 1, 2)  # apply gating
+        if self.talking_heads:  # mix across heads after softmax (bias-free keeps padding at zero)
+            attn_weights = self.talking_2(attn_weights.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+        if self.edge_gate:
+            g = functional.sigmoid(self.linear_g(edge_x))  # (B, L_q, L_kv, num_heads)
+            attn_weights = attn_weights * g.permute(0, 3, 1, 2)  # apply gating
 
         a_out = torch.matmul(attn_weights, v)  # (B, num_heads, L_q, head_dim)
 
