@@ -538,6 +538,13 @@ class Transformer(nn.Module):
         If ``True``, edge features are updated after attention. The default is ``False``
     mup: bool, optional
         Whether to use μP parameterization. The default is ``False``.
+    drop_path : float, optional
+        Drop-path (stochastic depth) rate. The default is ``0.0``.
+    drop_path_schedule : str, optional
+        How ``drop_path`` is distributed across layers, one of ``{"uniform", "linear"}``.
+        ``"uniform"`` applies the same rate to every layer; ``"linear"`` ramps from
+        ``drop_path / 2`` at the first layer to ``drop_path`` at the last (DeParT). The
+        default is ``"uniform"``.
     **kwargs : Any
         Extra keyword arguments forwarded to :class:`EncoderLayer` (e.g., ``attn_kwargs``,
         ``dense_kwargs``, ``ls_init``, etc.).
@@ -561,6 +568,8 @@ class Transformer(nn.Module):
         edge_embed_dim: int = 0,
         update_edges: bool = False,
         mup: bool = False,
+        drop_path: float = 0.0,
+        drop_path_schedule: str = "uniform",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -585,6 +594,10 @@ class Transformer(nn.Module):
         self.edge_embed_dim = edge_embed_dim
         self.update_edges = update_edges
         self.mup = mup
+        self.drop_path = drop_path
+        self.drop_path_schedule = drop_path_schedule
+
+        assert drop_path_schedule in {"uniform", "linear"}, "Invalid drop_path_schedule!"
 
         if self.update_edges:
             assert edge_embed_dim > 0, "Cannot update edges with edge_embed_dim=0"
@@ -606,6 +619,7 @@ class Transformer(nn.Module):
                 embed_dim=embed_dim,
                 norm=norm,
                 depth=depth,
+                drop_path=self._layer_drop_path(depth, num_layers),
                 edge_embed_dim=edge_embed_dim,
                 update_edges=update_edges,
                 **kwargs,
@@ -634,6 +648,26 @@ class Transformer(nn.Module):
             )
             self.register_buffer("register_mask", torch.zeros(num_registers, dtype=torch.bool))
         self.featurewise = nn.ModuleList()
+
+    def _layer_drop_path(self, depth: int, num_layers: int) -> float:
+        """Drop-path rate for a given layer under the configured schedule.
+
+        Parameters
+        ----------
+        depth : int
+            Layer index in ``[0, num_layers)``.
+        num_layers : int
+            Total number of layers.
+
+        Returns
+        -------
+        float
+            The drop-path rate for this layer. ``"linear"`` ramps from
+            ``drop_path / 2`` (first layer) to ``drop_path`` (last layer).
+        """
+        if self.drop_path_schedule == "linear" and num_layers > 1:
+            return self.drop_path * 0.5 * (1 + depth / (num_layers - 1))
+        return self.drop_path
 
     def set_backend(self, attn_type: str) -> None:
         """Set the attention backend for all layers.
