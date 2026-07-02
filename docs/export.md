@@ -45,6 +45,36 @@ The model name is used to construct the output probability variable names in Ath
     repair_ckpt <path_to_checkpoint>
     ```
 
+### Batched standalone export
+
+By default `to_onnx` produces an Athena-style model that runs a **single event per inference call**: sequence inputs (tracks, flows, ...) are given without an event batch dimension and padding masks are not part of the interface.
+
+If instead you want to run the model in a **standalone ONNX Runtime** environment and evaluate **many events per inference call**, pass `--batched-standalone`:
+
+```bash
+to_onnx \
+    --ckpt_path logs/<timestamp>/ckpts/checkpoint.ckpt \
+    --name eventmodel \
+    --batched-standalone
+```
+
+This changes the exported interface as follows:
+
+- The global input keeps shape `[batch, features]`.
+- Each sequence input keeps shape `[batch, n_objects, features]` (an explicit event batch dimension is added).
+- Each sequence input gets an accompanying **boolean mask input** named `<sequence>_features_mask` with shape `[batch, n_objects]`, where `True` marks a **padded** object and `False` a real one.
+- The `batch` axis (and the per-sequence object axis) are marked as dynamic, so a single exported model handles any number of events and objects.
+
+!!! warning "Not Athena-compatible"
+
+    `--batched-standalone` exports are intended for standalone ONNX Runtime inference only and **will not work in Athena**. The script emits a `UserWarning` to remind you of this. For Athena deployment, export without this flag.
+
+!!! info "Global (event-level) outputs only"
+
+    Batched standalone export currently emits **global/event-level task outputs only**. Auxiliary per-object outputs (`track_origin`, `track_vertexing`, `track_type`) and MaskFormer object outputs (`--object_name`) are **not yet implemented** for this mode (their validation needs batched post-processing that is not in place — a SALT limitation, not an ONNX one) and will raise an error. Use the default export for those.
+
+As with the default path, the script validates the exported model against PyTorch (see [Athena Validation](#athena-validation)) before saving, this time sweeping a range of sequence lengths over a multi-event batch with padded objects.
+
 ### Combining outputs
 For compatability, or just ease, it might be required to combine outputs. This can be done via the 'combine_outputs' argument, which takes the form
 
