@@ -134,6 +134,16 @@ def parse_args(args: list[str] | None) -> argparse.Namespace:
         help="Run with uncomitted changes.",
         action="store_true",
     )
+    parser.add_argument(
+        "--batched-standalone",
+        help=(
+            "Export a standalone ONNX Runtime interface with an event batch dimension. "
+            "Sequence inputs keep shape [batch, n_objects, features] and get matching "
+            "boolean *_mask inputs where True marks padded objects. The default Athena "
+            "interface is unchanged."
+        ),
+        action="store_true",
+    )
 
     # Parse provided args list (or sys.argv if None)
     return parser.parse_args(args)
@@ -147,6 +157,12 @@ class ONNXModel(ModelWrapper):
       - enforces a consistent output naming scheme (including renames/combines),
       - exposes dynamic axes information,
       - and formats outputs for ONNX consumers (e.g., Athena).
+
+    With ``batched_standalone=True`` the export gains an event batch dimension and
+    per-sequence boolean ``*_mask`` inputs for standalone ONNX Runtime inference.
+    That mode currently emits global (event-level) task outputs only; auxiliary
+    per-track and MaskFormer object outputs are not yet implemented for it (a SALT
+    limitation, not an ONNX one).
     """
 
     def __init__(
@@ -159,6 +175,7 @@ class ONNXModel(ModelWrapper):
         mf_config: dict | None = None,
         combine_outputs: list[tuple] | None = None,
         rename_outputs: dict[str, str] | None = None,
+        batched_standalone: bool = False,
         **kwargs,
     ) -> None:
         # Initialize base wrapper (loads underlying model and config)
@@ -189,11 +206,29 @@ class ONNXModel(ModelWrapper):
         # Configure optional output rewrites (renames and linear combinations)
         self.combine_outputs = combine_outputs or []
         self.rename_outputs = rename_outputs or {}
+        self.batched_standalone = batched_standalone
+        self.object = object_name
+
+        unsupported_batched_tasks = {
+            "track_origin",
+            "track_vertexing",
+            "track_type",
+        }.intersection(self.tasks_to_output)
+        if self.batched_standalone and (unsupported_batched_tasks or self.object):
+            unsupported = sorted(unsupported_batched_tasks)
+            if self.object:
+                unsupported.append(f"object outputs for {self.object}")
+            raise ValueError(
+                "Batched standalone ONNX export does not yet implement auxiliary track "
+                "or MaskFormer object outputs: their validation needs batched "
+                "post-processing that is not in place. This is a SALT implementation "
+                "limit, not an ONNX one, and currently supports global task outputs only. "
+                f"Unsupported requested outputs: {unsupported}"
+            )
 
         # If we export MaskFormer object outputs, both name and config must be set
         if sum([bool(object_name), bool(mf_config)]) not in {0, 2}:
             raise ValueError("If one of object name or mf config is defined, so must the other.")
-        self.object = object_name
         self.mf_config = MaskformerConfig(**mf_config) if mf_config else None
         if self.object and self.mf_config:
             self.object_params = {
@@ -208,22 +243,39 @@ class ONNXModel(ModelWrapper):
 
         # Build example inputs aligned with the feature map for ONNX tracing
         example_input_list = []
+        example_batch_size = 2 if self.batched_standalone else 1
         num_tracks = 40
         self.salt_names = []
         self.input_names = []
+        self.sequence_mask_names = []
         self.aux_sequence_index = 1
         # Iterate in feature-map order to create per-input placeholders
         for i, feature in enumerate(self.feature_map):
             if feature["name_salt"] == self.global_object:
-                example_input_list.append(torch.rand(1, self.input_dims[self.global_object]))
-            else:
                 example_input_list.append(
-                    torch.rand(1, num_tracks, self.input_dims[feature["name_salt"]]).squeeze(0)
+                    torch.rand(example_batch_size, self.input_dims[self.global_object])
                 )
+            else:
+                sequence_input = torch.rand(
+                    example_batch_size,
+                    num_tracks,
+                    self.input_dims[feature["name_salt"]],
+                )
+                if not self.batched_standalone:
+                    sequence_input = sequence_input.squeeze(0)
+                example_input_list.append(sequence_input)
+                if self.batched_standalone:
+                    mask_name = f"{feature['name_athena_out']}_mask"
+                    example_input_list.append(
+                        torch.zeros(example_batch_size, num_tracks, dtype=torch.bool)
+                    )
+                    self.sequence_mask_names.append((feature["name_salt"], mask_name))
             if feature["name_salt"] == self.aux_sequence_object:
                 self.aux_sequence_index = i
             self.salt_names.append(feature["name_salt"])
             self.input_names.append(feature["name_athena_out"])
+            if self.batched_standalone and not feature["is_global"]:
+                self.input_names.append(f"{feature['name_athena_out']}_mask")
 
         # Tuple of inputs in export order (ONNX expects a tuple)
         self.example_input_array = tuple(example_input_list)
@@ -319,6 +371,19 @@ class ONNXModel(ModelWrapper):
         # Mark variable-length input sequences as dynamic along axis 0
         dynamic_axes: dict[str, dict[int, str]] = {}
         for feature in self.feature_map:
+            if self.batched_standalone:
+                if feature["is_global"]:
+                    dynamic_axes[feature["name_athena_out"]] = {0: "batch"}
+                else:
+                    dynamic_axes[feature["name_athena_out"]] = {
+                        0: "batch",
+                        1: feature["athena_num_name"],
+                    }
+                    dynamic_axes[f"{feature['name_athena_out']}_mask"] = {
+                        0: "batch",
+                        1: feature["athena_num_name"],
+                    }
+                continue
             if not feature["is_global"]:
                 dynamic_axes.update({feature["name_athena_out"]: {0: feature["athena_num_name"]}})
 
@@ -335,6 +400,8 @@ class ONNXModel(ModelWrapper):
         if self.object:
             out_name = f"{self.name}_{self.object}"
             dynamic_axes[out_name] = {0: "n_tracks"}
+        if self.batched_standalone:
+            dynamic_axes.update({out_name: {0: "batch"} for out_name in self.output_names})
         return dynamic_axes
 
     def forward(self, *args: torch.Tensor):  # type: ignore[override]
@@ -359,19 +426,31 @@ class ONNXModel(ModelWrapper):
             Flat tuple of ONNX outputs in the order given by :attr:`output_names`.
         """
         # Basic input checks for shape/order consistency
-        assert len(args) == len(self.salt_names), "Number of inputs does not match feature map."
+        assert len(args) == len(self.input_names), "Number of inputs does not match feature map."
 
         input_dict = {}
-
-        for i, name in enumerate(self.salt_names):
+        masks = {}
+        arg_index = 0
+        for name in self.salt_names:
+            tensor = args[arg_index]
             if name == self.global_object:
                 # Keep original global input
-                assert len(args[i].shape) == 2, (
-                    "Jets should have a batch dimension and variable dimension"
+                assert len(tensor.shape) == 2, (
+                    f"{self.global_object} should have a batch dimension and variable dimension"
                 )
-                input_dict[name] = args[i]
+                input_dict[name] = tensor
+                arg_index += 1
+            elif self.batched_standalone:
+                assert len(tensor.shape) == 3, (
+                    f"{name} should have shape [batch, objects, features]"
+                )
+                input_dict[name] = tensor
+                arg_index += 1
+                masks[name] = args[arg_index]
+                arg_index += 1
             else:
-                input_dict[name] = args[i].unsqueeze(0)
+                input_dict[name] = tensor.unsqueeze(0)
+                arg_index += 1
 
         # Add global features to input_dict if needed
         if "global" in self.variable_map:
@@ -382,12 +461,13 @@ class ONNXModel(ModelWrapper):
             input_dict, self.variable_map, self.global_object
         )
 
-        # Build padding masks (all valid by default for export-time inputs)
-        masks = {
-            k: torch.zeros((1, args[i].shape[0]), dtype=torch.bool)
-            for i, k in enumerate(self.salt_names)
-            if k != self.global_object and not k.startswith("_")
-        }
+        if not self.batched_standalone:
+            # Build padding masks (all valid by default for export-time inputs)
+            masks = {
+                k: torch.zeros((1, args[i].shape[0]), dtype=torch.bool, device=args[i].device)
+                for i, k in enumerate(self.salt_names)
+                if k != self.global_object and not k.startswith("_")
+            }
 
         # Run the wrapped model forward (returns predictions dict and losses)
         outputs = super().forward(input_dict, masks)[0]
@@ -397,6 +477,7 @@ class ONNXModel(ModelWrapper):
             (
                 t.get_onnx(outputs[self.global_object][t.name], labels=structured_input_dict)
                 for t in self.global_tasks
+                if t.name in self.tasks_to_output
             ),
             (),
         )
@@ -620,6 +701,13 @@ def main(args: list[str] | None = None) -> None:
     """
     # Parse the command-line arguments
     parsed_args = parse_args(args)
+    if parsed_args.batched_standalone:
+        warnings.warn(
+            "The --batched-standalone ONNX export is intended for standalone ONNX Runtime "
+            "inference and will not work in Athena.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # Enforce clean working tree unless --force is specified
     if not parsed_args.force:
@@ -691,6 +779,7 @@ def main(args: list[str] | None = None) -> None:
             map_location=torch.device("cpu"),
             combine_outputs=combine_outputs,
             rename_outputs=rename_outputs,
+            batched_standalone=parsed_args.batched_standalone,
             **config["model"],
         )
 
@@ -742,7 +831,7 @@ def main(args: list[str] | None = None) -> None:
         seq_names_salt.append(feature["name_salt"])
         seq_names_onnx.append(feature["name_athena_out"])
 
-    # Compare PyTorch vs ONNX numerics across many synthetic cases
+    # Compare PyTorch vs ONNX numerics across synthetic cases
     compare_outputs(
         pt_model,
         onnx_path,
@@ -751,6 +840,7 @@ def main(args: list[str] | None = None) -> None:
         seq_names_onnx=seq_names_onnx,
         variable_map=config["data"]["variables"],
         tasks_to_output=onnx_model.tasks_to_output,
+        batched=parsed_args.batched_standalone,
     )
 
     # Final success message with path of saved model
