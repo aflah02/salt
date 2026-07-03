@@ -229,6 +229,11 @@ def test_regression_gaussian(tmp_path) -> None:
 
 
 @pytest.mark.filterwarnings(w)
+def test_regression_betaNLL(tmp_path) -> None:
+    run_combined(tmp_path, "regression_betaNLL.yaml", do_eval=True, do_onnx=True)
+
+
+@pytest.mark.filterwarnings(w)
 def test_regression_multi_target(tmp_path) -> None:
     run_combined(tmp_path, "regression_multi_target.yaml", do_eval=False, do_onnx=False)
 
