@@ -39,6 +39,22 @@ class MaskformerMetrics(Callback):
         self.only_val = only_val
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:
+        """Check a mask decoder is present and prepare the metric logging helpers.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        module : LightningModule
+            The model being trained.
+        stage : str
+            Stage being set up, only ``"fit"`` is handled.
+
+        Raises
+        ------
+        ValueError
+            If the model has no mask decoder.
+        """
         if trainer.fast_dev_run or stage != "fit":
             return
         model = module.model
@@ -158,9 +174,11 @@ class MaskformerMetrics(Callback):
         self.log(metrics, stage)
 
     def on_train_batch_end(self, trainer, module, outputs, batch, batch_idx):  # noqa: ARG002
+        """Compute and log the matching metrics for the training batch."""
         if not self.only_val and not trainer.fast_dev_run:
             self._get_log_metrics(module, outputs, "train")
 
     def on_validation_batch_end(self, trainer, module, outputs, batch, batch_idx):  # noqa: ARG002
+        """Compute and log the matching metrics for the validation batch."""
         if not trainer.fast_dev_run:
             self._get_log_metrics(module, outputs, "val")

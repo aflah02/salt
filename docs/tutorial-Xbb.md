@@ -135,6 +135,13 @@ source ~/.bashrc
 
 ## Tutorial tasks
 
+!!! warning "This tutorial targets the `0.3` tag of salt"
+
+    The commands and config keys below correspond to the `0.3` tag which you check out in the first task.
+    On the current `main` branch several things have since been renamed: `num_jets_train`/`num_jets_val` are now
+    `num_train`/`num_val`, the `gnn:` model block is now `encoder:`, and `SubjetXbb.yaml` has moved to
+    `configs/legacy/SubjetXbb.yaml`. Make sure you work from the `0.3` tag for the tutorial to function as described.
+
 ### 1. Fork, clone and install Salt
 
 Although the singularity images come with salt pre-installed, they do not allow for an editable version of the package.
@@ -175,7 +182,7 @@ Go to the GitLab project page of Salt to begin with the task: <https://gitlab.ce
     Note that, depending on your machine, the test suite may take a while to run. To just run a single test, you can instead use
     
     ```bash
-    pytest --cov=salt --show-capture=stdout tests/test_pipeline.py::TestModels::test_GN1
+    pytest --cov=salt --show-capture=stdout tests/test_pipeline.py::test_GN1
     ```
 
 ??? warning "Solution"
@@ -198,7 +205,7 @@ Go to the GitLab project page of Salt to begin with the task: <https://gitlab.ce
 
     ```bash
     singularity shell -e --nv --bind $PWD,/afs,/eos,/tmp,/cvmfs \
-    /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/aft/algorithms/salt:0-3
+    /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/aft/algorithms/salt:0.3
     ```
 
     If you want to modify the salt code and contribute to development, you need to install the salt package to switch to development mode:
@@ -246,7 +253,7 @@ Go to the GitLab project page of Salt to begin with the task: <https://gitlab.ce
 
     Open the `base.yaml` config file and set `logger: False` under the `trainer:` block. Remove the existing sub-blocks under `logger:`. You also need to remove the 
     ```
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
     ``` 
     line under the `trainer: callbacks:` block, since this feature requires a logger to work.
 
@@ -261,7 +268,7 @@ You can take a look inside the `SubjetXbb.yaml` or `norm_dict.yaml` file to see 
 
 ??? info "Hint: Modifying the `SubjetXbb.yaml` config file"
 
-    You'll need to specify the `SubjetXbb.yaml` model config to use. This config file needs to be edited with the correct paths to your locally downloaded training files. You'll need to modify the `train_file`, `val_file` and `scale_dict` keys under the `data:` block.
+    You'll need to specify the `SubjetXbb.yaml` model config to use. This config file needs to be edited with the correct paths to your locally downloaded training files. You'll need to modify the `train_file`, `val_file` and `norm_dict` keys under the `data:` block.
     To change the number of epochs the training runs for, you can modify the `max_epochs` key under the `trainer:` block.
 
 ??? info "Hint: Warning about the number of workers used in the dataloaders"
@@ -349,7 +356,7 @@ In this task, you will modify parameters of the models trained in the previous t
 
 ??? info "Hint: Removing auxiliary tasks"
 
-    The `GN2X.yaml` includes the auxiliary track classification task. To remove it, look in the `tasks:` block for the list item which has `name: track_classification`. Removing the associated block will disable that part of the model and remove the associated track classification loss from the overall training loss function when training.
+    The `GN2X.yaml` includes the auxiliary track origin classification task. To remove it, look in the `tasks:` block for the list item which has `name: track_origin`. Removing the associated block will disable that part of the model and remove the associated track classification loss from the overall training loss function when training.
 
 ??? warning "Solution"
 

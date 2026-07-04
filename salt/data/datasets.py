@@ -726,6 +726,23 @@ class SaltDataset(Dataset):
         return inputs, pad_masks, labels
 
     def get_num(self, num_requested: int):
+        """Resolve the number of samples to use, where -1 means all available.
+
+        Parameters
+        ----------
+        num_requested : int
+            Requested number of samples, or -1 to use the full file.
+
+        Returns
+        -------
+        int
+            Number of samples to use.
+
+        Raises
+        ------
+        ValueError
+            If more samples are requested than are available in the file.
+        """
         with h5py.File(self.filename, "r") as f:
             num_available = len(f[self.global_object])
 
@@ -744,6 +761,13 @@ class SaltDataset(Dataset):
         return num_requested
 
     def check_file(self):
+        """Check the input file contains the configured datasets and variables.
+
+        Raises
+        ------
+        KeyError
+            If a configured dataset or variable is missing from the input file.
+        """
         keys = {self.input_map[k] for k in self.variables if not k.startswith("_")}
         with h5py.File(self.filename, "r") as f:
             available = set(f.keys())
@@ -773,7 +797,28 @@ class SaltDataset(Dataset):
                         f" '{self.filename.name}'."
                     )
 
-    def process_labels(self, labels, batch, input_name):
+    def process_labels(self, labels: dict, batch: np.ndarray, input_name: str) -> dict | None:
+        """Extract and convert the labels of one input type from a loaded batch.
+
+        Parameters
+        ----------
+        labels : dict
+            Per-input-type label dict updated in place with torch tensors.
+        batch : np.ndarray
+            Structured array holding the loaded batch for this input type.
+        input_name : str
+            Name of the input type being processed.
+
+        Returns
+        -------
+        dict | None
+            The labels of this input type, or None if it has no configured labels.
+
+        Raises
+        ------
+        ValueError
+            If the on-the-fly labeller is used but required fields are missing.
+        """
         if (len(self.labels) != 0) and (input_name in self.labels):
             labels[input_name] = {}
             for label in self.labels[input_name]:

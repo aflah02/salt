@@ -25,7 +25,7 @@ you want a specific path, you can define this like this:
 ```yaml
 data:
   train_file: /path/to/somewhere/pp_output_train_split_*.h5
-  train_vds_file: /path/to/something/completely/else/my_train_vds_file.h5
+  train_vds_path: /path/to/something/completely/else/my_train_vds_file.h5
 ```
 
 All the aformentioned settings are also usable for the validation and test file(s):
@@ -33,11 +33,24 @@ All the aformentioned settings are also usable for the validation and test file(
 ```yaml
 data:
   train_file: /path/to/somewhere/pp_output_train_split_*.h5
-  train_vds_file: /path/to/something/completely/else/my_train_vds_file.h5
+  train_vds_path: /path/to/something/completely/else/my_train_vds_file.h5
   val_file: /path/to/somewhere/pp_output_val_split_*.h5
-  val_vds_file: /path/to/something/completely/else/my_val_vds_file.h5
+  val_vds_path: /path/to/something/completely/else/my_val_vds_file.h5
   test_file: /path/to/somewhere/pp_output_test_split_*.h5
-  test_vds_file: /path/to/something/completely/else/my_test_vds_file.h5
+  test_vds_path: /path/to/something/completely/else/my_test_vds_file.h5
+```
+
+When evaluating, you can additionally set `data.test_suff` to append a suffix to the evaluation output file name, see the [evaluation docs](evaluation.md).
+
+#### The Global Object
+
+The `data.global_object` key (by default `jets`) sets the name of the global input object.
+It is used to look up the global inputs in the h5 file and to name the outputs of global tasks.
+The CLI automatically links it to `model.global_object`, so you only need to set it in the `data` config, e.g. when training on whole events instead of jets:
+
+```yaml
+data:
+  global_object: events
 ```
 
 #### Selecting Training Variables
@@ -100,6 +113,28 @@ data:
     tracks: 10
 ```
 
+#### Applying Selections
+
+You can apply cuts to constituent inputs at load time using the `selections` key.
+Cuts are specified per input type as a list of [`atlas-ftag-tools`](https://github.com/umami-hep/atlas-ftag-tools) cut strings, and constituents failing the cuts are treated as padding.
+
+```yaml
+data:
+  selections:
+    tracks:
+      - "d0 < 3.5"
+      - "pt > 500"
+```
+
+#### Non-finite Inputs
+
+By default, salt raises an error if any (non-padded) input values are not finite.
+Three flags in the `data` config control this behaviour:
+
+- `non_finite_to_num: True` converts `nan` and `inf` values to zero when loading the data.
+- `ignore_finite_checks: True` downgrades the error to a warning, in case you handle non-finite inputs deliberately.
+- `recover_malformed: True` converts malformed `truthOriginLabel` values to the invalid label instead of failing.
+
 #### Remapping Labels
 
 This section is about remapping labels on the fly, which is useful in case they are not already mapped to `0, 1, 2...`.
@@ -146,21 +181,21 @@ At present, this feature is only available for jets and for the `flavour_label` 
 
 Different transformations ("transforms") can be applied to input data after being loaded but before training. You can choose from the classes defined in `salt.data.transforms` and they are applied in the same order that they are defined in the configuration file. Transforms are specified under the `data` configuration block.
 
-The `GaussianNoise` class is available for applying noise to the input features of your choice. The input type (usually `jets` or `tracks`), variable name, and mean and standard deviation of the desired noise are specified. The mean and standard deviation are fractions of the input values. An example config for this is shown below.
+The `GaussianNoise` class is available for applying noise to the input features of your choice. The `noise_params` dict is keyed by input type (usually `jets` or `tracks`), each entry holding a list of variable names with the mean and standard deviation of the desired noise. The mean and standard deviation are fractions of the input values. An example config for this is shown below.
 
 ```yaml
 transforms:
   - class_path: salt.data.transforms.GaussianNoise
     init_args:
       noise_params:
-        - input_type: jets
-          variable: pt_btagJes
-          mean: 0.0
-          std: 0.1
-        - input_type: tracks
-          variable: d0
-          mean: 0.1
-          std: 0.05
+        jets:
+          - variable: pt_btagJes
+            mean: 0.0
+            std: 0.1
+        tracks:
+          - variable: d0
+            mean: 0.1
+            std: 0.05
 ```
 
 This will add noise with mean 0 and standard deviation 0.1 to the `pt_btagJes` jet feature and separately add noise with mean 0.1 and standard deviation 0.05 to the `d0` track feature.
@@ -280,6 +315,30 @@ It is possible to include edge features as network input, representing relationa
 - `subjetIndex` = 1 if tracks are part of same subjet, 0 if not (requires `subjetIndex`)
 - `mass` = $\ln\sqrt{\left(\Sigma E\right)^2 - \left(\Sigma p_T\cos\phi\right)^2 - \left(\Sigma p_T\sin\phi\right)^2 - \left(\Sigma p_T\sinh\eta\right)^2}$ (requires `pt`, `eta`, `phi`, `energy`)
 
+To enable edge features, three pieces of config are needed: the `edge_constructors` in the `data` config select which edge features to compute, an `edge_init_nets` entry in the model embeds them, and the encoder needs `edge_embed_dim` set (and optionally `update_edges` to update the edge representations through the encoder layers).
+A complete example can be found in [`GN2XE.yaml`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/configs/GN2/GN2XE.yaml):
+
+```yaml
+data:
+  edge_constructors:
+    - input_name: tracks
+      edge_features: [dR, z, kt, subjetIndex, isSelfLoop]
+
+model:
+  model:
+    init_args:
+      edge_init_nets:
+        - input_name: tracks
+          dense_config:
+            output_size: &edge_embed_dim 32
+            hidden_layers: [32]
+      encoder:
+        class_path: salt.models.Transformer
+        init_args:
+          ...
+          edge_embed_dim: *edge_embed_dim
+          update_edges: true
+```
 
 #### Heterogeneous Models
 If multiple input types are provided, separate initialiser networks should be provided for each input type.
@@ -289,12 +348,12 @@ An example using both track and electron input types is provided below:
 init_nets:
   - input_name: tracks
     dense_config: &init
-    output_size: &embed_dim 192
-    hidden_layers: [256]
-    activation: &activation SiLU
+      output_size: &embed_dim 192
+      hidden_layers: [256]
+      activation: &activation SiLU
   - input_name: electrons
     dense_config:
-    <<: *init
+      <<: *init
 ```
 
 The separate input types are by default combined and treated homogeneously within the GNN layers. 
@@ -360,7 +419,187 @@ Here, two instances of featurewise transformations have been added to the model.
 like to transform (this can currently be either `input`, which applies the transformations to the features before they are passed into the initialisation network, `encoder`, which applies the transformations to the inputs of each layer to the encoder using separate networks, or `global`, which applies them to the global track representations outputted by the encoder). For each instance, you can specify either one or both of `dense_config_scale` or `dense_config_bias`, which configure dense networks whose output scales and biases the features of the chosen layer, respectively. It is important to ensure the `output_size` of these networks matches the number of features in the layer you are transforming. In this case, the transformations are applied to a model with 17 inputs per track, the layers of an encoder with 256 features, and the output of the encoder, which has 128 features for each track representation. You can optionally apply a layer normalisation after applying the transformations by setting `apply_norm: True` for a given network, as shown above.
 
 
+#### Encoder Configuration
+
+The main encoder is usually a [`salt.models.Transformer`][salt.models.transformer.Transformer].
+Beyond the basic `num_layers`, `embed_dim` and `out_dim`, several options can be tuned:
+
+- `attn_type`: attention backend, one of `torch-math` (default), `torch-flash`, `torch-meff` or `flash-varlen` (requires the `flash` extra and a supported GPU).
+- `attn_kwargs`: passed to the attention layers, e.g. `num_heads`, `do_qk_norm`, `do_v_norm`.
+- `dense_kwargs`: passed to the dense layers, e.g. `activation`, `gated`, `dropout`.
+- `num_registers`: number of learnable register tokens appended to the sequence (default 1), with `drop_registers` controlling whether they are dropped before pooling.
+- `norm` (e.g. `LayerNorm`, `RMSNorm`) and `norm_type` (`pre`, `post` or `hybrid` normalisation placement).
+- `ls_init`: initial value for LayerScale (disabled if unset).
+- `num_dense`: number of dense blocks per encoder layer.
+- `drop_path`: stochastic depth rate, with `drop_path_schedule` set to `uniform` (default) or `linear` (linearly increasing rate with depth, as in DeParT).
+
+When edge features are used (`edge_embed_dim > 0`), the edge-aware attention additionally supports the DeParT-style primitives `talking_heads: True` (mix attention scores across heads before and after the softmax) and `edge_gate: False` (disable the multiplicative edge gating to recover a purely additive ParT-style attention bias), both set via `attn_kwargs`.
+
+An example from [`GN3V01.yaml`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/configs/GN3v01/GN3V01.yaml):
+
+```yaml
+encoder:
+  class_path: salt.models.Transformer
+  init_args:
+    num_layers: 8
+    embed_dim: 256
+    out_dim: 256
+    attn_type: flash-varlen
+    norm: RMSNorm
+    norm_type: hybrid
+    num_registers: 8
+    attn_kwargs:
+      num_heads: 8
+```
+
+The init nets also accept an `attach_global: False` flag to disable the default concatenation of the global-object features onto each constituent.
+
+#### Merging Input Streams
+
+Using the `merge_dict` key of [`salt.models.SaltModel`][salt.models.SaltModel], several input types can be concatenated into a single stream after their init nets, so that downstream tasks can operate on the merged sequence:
+
+```yaml
+model:
+  model:
+    init_args:
+      merge_dict:
+        objects: [tracks, electrons]
+```
+
+Task labels configured for the merged stream are automatically replicated for each of its constituent input types.
+
+#### Task Options
+
+All tasks share the [`salt.models.TaskBase`][salt.models.TaskBase] arguments `name`, `input_name`, `dense_config`, `loss` and `weight`, where `weight` is the relative weight of the task loss in the total loss (see [loss modes][loss-modes]).
+
+For [`salt.models.ClassificationTask`][salt.models.ClassificationTask], in addition to the `label`, `label_map` and `class_names` options described [above][remapping-labels]:
+
+- `sample_weight`: name of a per-sample weight label used to weight the loss. Requires the configured loss to use `reduction: none`, see [`regression_weighted.yaml`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/configs/regression_weighted.yaml) for an example with a regression task.
+- `use_class_dict: True`: read the class weights for the loss from the `class_dict` file specified in the data config, instead of hardcoding them via the loss `weight` argument.
+
+Regression tasks ([`salt.models.RegressionTask`][salt.models.RegressionTask] and [`salt.models.GaussianRegressionTask`][salt.models.GaussianRegressionTask]) accept one or more `targets` plus at most one of three mutually exclusive target scaling options:
+
+- `norm_params`: explicit `mean` and `std` per target used to standardise the targets.
+- `target_denominators`: name of a variable per target to divide it by, e.g. to regress `pt` as a fraction of a reference `pt`.
+- `scaler`: a functional [`salt.utils.scalers.RegressionTargetScaler`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/utils/scalers.py) applying a per-target `op` (`log`, `exp` or `linear`) with configurable scales and offsets.
+
+The `custom_output_names` option can be used to override the output names in the evaluation file, and `sample_weight` works as for classification.
+For vertexing, use [`salt.models.VertexingTask`][salt.models.VertexingTask], which performs edge classification on track pairs using a compatibility label such as `ftagTruthVertexIndex`.
+
+For [`salt.models.GaussianRegressionTask`][salt.models.GaussianRegressionTask], the [`salt.models.BetaNLLLoss`][salt.models.BetaNLLLoss] from [Seitzer et al. (2022)](https://arxiv.org/abs/2203.09168) is available as an alternative to `torch.nn.GaussianNLLLoss`.
+It weights the Gaussian negative log-likelihood by $\sigma^{2\beta}$ to reduce the dominance of low-uncertainty predictions in the gradient, where `beta: 0` recovers the standard Gaussian NLL (but with a variance clamp that also acts on the gradients, improving training stability) and `beta: 1` entirely removes the $1/\sigma^2$ down-weighting of the squared error:
+
+```yaml
+- class_path: salt.models.GaussianRegressionTask
+  init_args:
+    ...
+    loss:
+      class_path: salt.models.BetaNLLLoss
+      init_args:
+        beta: 0.5
+        reduction: none
+```
+
+See [`regression_betaNLL.yaml`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/configs/regression_betaNLL.yaml) for a complete example.
+
+#### MaskFormer
+
+Salt supports MaskFormer-style object reconstruction, where a mask decoder predicts a set of objects (e.g. truth hadrons) together with the mask of constituents (e.g. tracks) belonging to each of them.
+Two pieces of configuration are needed: an `mf_config` block in the `data` config describing the truth objects and their matching to constituents, and a `mask_decoder` in the model.
+A complete example is provided in [`MaskFormer.yaml`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/configs/MaskFormer.yaml).
+
+```yaml
+data:
+  mf_config:
+    object:
+      name: truth_hadrons
+      id_label: barcode
+      class_label: flavour
+      object_classes:
+        b: { raw: 5, mapped: 0 }
+        c: { raw: 4, mapped: 1 }
+        null: { raw: -1, mapped: 2 }
+    constituent:
+      name: tracks
+      id_label: ftagTruthParentBarcode
+```
+
+Here `name` refers to the h5 dataset with the truth objects, `id_label` is the field used to match objects to constituents, and `object_classes` maps the raw values of `class_label` to contiguous training classes (the `null` class labels empty object slots).
+Each entry in `object_classes` can optionally define a `weight` used for the object classification loss.
+
+The `object` block supports several further options to select and order the truth objects:
+
+- `max_objects`: number of object slots per jet (`num_objects` is a deprecated alias). If unset, it is automatically linked to `mask_decoder.num_objects` by the CLI.
+- `cuts`: a list of `{field, min, max}` cuts on object fields; objects failing them are relabelled to the `null` class.
+- `sort_by` / `sort_descending`: field used to order objects when filling the available slots.
+- `pv_class`: mapped class index that is pinned to slot 0 (e.g. the primary vertex).
+- `max_lxy_mm` (with `lxy_field`, default `Lxy`): relabel objects beyond this displacement to the `null` class.
+
+On the model side, the decoder is configured via `mask_decoder`:
+
+```yaml
+model:
+  model:
+    init_args:
+      mask_decoder:
+        class_path: salt.models.maskformer.MaskDecoder
+        init_args:
+          num_objects: 5
+          embed_dim: &embed_dim 128
+          num_layers: 3
+          aux_loss: false
+          md_config:
+            mask_attention: true
+            bidirectional_ca: true
+            n_heads: 8
+          class_net:
+            class_path: salt.models.Dense
+            init_args:
+              input_size: *embed_dim
+              output_size: 3 # b/c/null
+          mask_net:
+            class_path: salt.models.Dense
+            init_args:
+              input_size: *embed_dim
+              output_size: *embed_dim
+          loss_config:
+            num_classes: 2
+            loss_weights:
+              object_class_ce: 2.0
+              mask_ce: 10.0
+              mask_dice: 2.0
+              regression: 2.0
+```
+
+The CLI automatically injects the object and constituent labels required for training, and computes the object classification `class_weights` from `object_classes` if they are not set explicitly.
+
 ### Training
+
+#### Loss Modes
+
+The total loss is a combination of the individual task losses, controlled by `model.loss_mode`:
+
+- `wsum` (default): weighted sum of the task losses using the per-task `weight` values.
+- `GLS`: [geometric loss combination](https://arxiv.org/abs/1904.08492) of the task losses. Task weights are not used and must all be left at 1.
+
+#### Optimiser & Learning Rate Schedule
+
+The optimiser is selected via `model.optimizer`, one of `AdamW` (default), `lion` (requires the `lion-pytorch` package) or `HybridMuonAdamW` (Muon for the hidden weight matrices, AdamW for the remaining parameters).
+
+The learning rate follows a [`OneCycleLR`](https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html) schedule configured via `model.lrs_config`:
+
+```yaml
+model:
+  lrs_config:
+    initial: 1e-7 # initial learning rate
+    max: 5e-4 # peak learning rate
+    end: 1e-7 # final learning rate
+    pct_start: 0.1 # fraction of the training spent ramping up to max
+    weight_decay: 1e-5 # optimiser weight decay
+    last_epoch: -1 # set to 0 to restart the schedule when resuming a training
+```
+
+Only `initial` (as the starting learning rate) and `weight_decay` are passed to the optimiser itself; for `HybridMuonAdamW`, the Muon-specific hyperparameters use the defaults defined in [`salt/optim/hybrid_muon_adamw.py`](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/optim/hybrid_muon_adamw.py).
 
 #### Compiled Models
 
@@ -443,16 +682,16 @@ To run a GN2 training with mup, you also need to specify in  `encoder` (and the 
 ```yaml
 init_nets:
     - input_name: tracks
-        dense_config:
-            ...
-            mup: True
+      dense_config:
+          ...
+          mup: True
 ```
 
 - for `encoder`:
 
 ```yaml
 encoder:
-    class_path: salt.models.TransformerEncoder
+    class_path: salt.models.Transformer
     init_args:
         ...
         mup: True
@@ -515,9 +754,9 @@ To run a GN2 training with mup, you also need to specify in  `encoder` (and the 
 ```yaml
 init_nets:
     - input_name: tracks
-        dense_config:
-            ...
-            mup: True
+      dense_config:
+          ...
+          mup: True
 ```
 - for `encoder`:
 ```yaml

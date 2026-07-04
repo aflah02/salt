@@ -56,8 +56,11 @@ class BetaNLLLoss(nn.Module):
             loss = loss * (var.detach() ** self.beta)
 
         # Check for NaN or Inf values in the loss
-        if torch.isnan(loss).any() or torch.isinf(loss).any():
-            raise ValueError(f"Regression loss is NaN or Inf before reduction: {loss}")
+        if not torch.isfinite(loss).all():
+            num_bad = (~torch.isfinite(loss)).sum().item()
+            raise ValueError(
+                f"Regression loss has {num_bad}/{loss.numel()} non-finite values before reduction."
+            )
 
         if self.reduction == "mean":
             return loss.mean()

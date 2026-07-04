@@ -188,6 +188,7 @@ class SaltDataModule(lightning.LightningDataModule):
             )
 
     def prepare_data(self):
+        """Move the train and validation files to ``move_files_temp`` if configured."""
         if self.move_files_temp and not self.trainer.fast_dev_run:
             print("-" * 100)
             print(f"Moving train files to {self.move_files_temp} ")
@@ -195,6 +196,13 @@ class SaltDataModule(lightning.LightningDataModule):
             fu.move_files_temp(self.move_files_temp, self.train_file, self.val_file)
 
     def setup(self, stage: str):
+        """Create the train/val or test :class:`SaltDataset` instances for this stage.
+
+        Parameters
+        ----------
+        stage : str
+            Either ``"fit"`` or ``"test"``.
+        """
         if self.trainer is not None and self.trainer.is_global_zero:
             print("-" * 100)
 
@@ -245,6 +253,22 @@ class SaltDataModule(lightning.LightningDataModule):
             print("-" * 100, "\n")
 
     def get_dataloader(self, stage: str, dataset: SaltDataset, shuffle: bool):
+        """Build a batched DataLoader around a dataset.
+
+        Parameters
+        ----------
+        stage : str
+            Either ``"fit"`` or ``"test"``, controls whether the last batch is dropped.
+        dataset : SaltDataset
+            Dataset to load from.
+        shuffle : bool
+            Whether to (weakly) shuffle the batches.
+
+        Returns
+        -------
+        DataLoader
+            The configured dataloader.
+        """
         drop_last = stage == "fit"
         return DataLoader(
             dataset=dataset,
@@ -260,15 +284,43 @@ class SaltDataModule(lightning.LightningDataModule):
         )
 
     def train_dataloader(self):
+        """Return the training dataloader.
+
+        Returns
+        -------
+        DataLoader
+            The training dataloader.
+        """
         return self.get_dataloader(dataset=self.train_dset, stage="fit", shuffle=True)
 
     def val_dataloader(self):
+        """Return the validation dataloader.
+
+        Returns
+        -------
+        DataLoader
+            The validation dataloader.
+        """
         return self.get_dataloader(dataset=self.val_dset, stage="test", shuffle=False)
 
     def test_dataloader(self):
+        """Return the test dataloader.
+
+        Returns
+        -------
+        DataLoader
+            The test dataloader.
+        """
         return self.get_dataloader(dataset=self.test_dset, stage="test", shuffle=False)
 
     def teardown(self, stage: str | None = None):
+        """Remove the temporary training files moved by :meth:`prepare_data`.
+
+        Parameters
+        ----------
+        stage : str | None, optional
+            Stage that finished, only ``"fit"`` triggers the cleanup. By default None.
+        """
         if (
             stage == "fit"
             and self.move_files_temp

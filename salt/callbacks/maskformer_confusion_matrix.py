@@ -71,6 +71,22 @@ class MaskformerConfusionMatrix(Callback):
         self.train_targets: list[Tensor] = []
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:
+        """Check a mask decoder is present and read the object class names.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        module : LightningModule
+            The model being trained.
+        stage : str
+            Stage being set up, only ``"fit"`` is handled.
+
+        Raises
+        ------
+        ValueError
+            If the model has no mask decoder.
+        """
         if trainer.fast_dev_run or stage != "fit":
             return
         model = module.model
@@ -91,6 +107,7 @@ class MaskformerConfusionMatrix(Callback):
         batch,  # noqa: ARG002
         batch_idx,  # noqa: ARG002
     ):
+        """Accumulate object class predictions and targets from the validation batch."""
         if trainer.fast_dev_run:
             return
 
@@ -113,6 +130,7 @@ class MaskformerConfusionMatrix(Callback):
         batch,  # noqa: ARG002
         batch_idx,  # noqa: ARG002
     ):
+        """Accumulate object class predictions and targets from the training batch."""
         if self.only_val or trainer.fast_dev_run:
             return
 
@@ -173,6 +191,7 @@ class MaskformerConfusionMatrix(Callback):
         plt.close(fig)
 
     def on_validation_epoch_end(self, trainer, module):
+        """Log the validation confusion matrix every ``log_every_n_epochs`` epochs."""
         if trainer.fast_dev_run or len(self.val_preds) == 0:
             return
 
@@ -189,6 +208,7 @@ class MaskformerConfusionMatrix(Callback):
         self.val_targets.clear()
 
     def on_train_epoch_end(self, trainer, module):
+        """Log the training confusion matrix every ``log_every_n_epochs`` epochs."""
         if self.only_val or trainer.fast_dev_run or len(self.train_preds) == 0:
             return
 

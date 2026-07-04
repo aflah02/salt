@@ -14,6 +14,17 @@ class GradientLoggerCallback(Callback):
         self.log_every_n_steps = log_every_n_steps
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:
+        """Prepare the metric logging helper used by the epoch hooks.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        module : LightningModule
+            The model being trained.
+        stage : str
+            Stage being set up, only ``"fit"`` is handled.
+        """
         if trainer.fast_dev_run or stage != "fit":
             return
         kwargs = {"sync_dist": len(trainer.device_ids) > 1}

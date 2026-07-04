@@ -28,7 +28,7 @@ model:
                 # multiple targets are also supported, e.g: targets: [HadronConeExclTruthLabelPt, HadronConeExclTruthLabelEta]
                 norm_params: { mean: 1.0, std: 1.0 }
                 loss:
-                  class_path: salt.models.custom_losses.BetaNLLLoss
+                  class_path: salt.models.BetaNLLLoss
                   init_args:
                     beta: 0.5
                     reduction: none
@@ -46,7 +46,7 @@ model:
                 targets: dphi
                 norm_params: { mean: 1.0, std: 1.0 }
                 loss:
-                  class_path: salt.models.custom_losses.BetaNLLLoss
+                  class_path: salt.models.BetaNLLLoss
                   init_args:
                     beta: 1.0
                     reduction: none

@@ -22,6 +22,18 @@ class RMSNorm(torch.nn.Module):
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the RMS normalisation and learnable scale.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            Normalised tensor with the same shape and dtype as the input.
+        """
         output = self._norm(x.float()).type_as(x)
         return output * self.weight

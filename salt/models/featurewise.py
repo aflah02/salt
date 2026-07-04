@@ -69,6 +69,25 @@ class FeaturewiseTransformation(nn.Module):
             self.norm = nn.LayerNorm(self.num_features)
 
     def forward(self, inputs: dict, features: Tensor):
+        """Scale and bias the features based on the input parameters.
+
+        Parameters
+        ----------
+        inputs : dict
+            Input tensors, must contain a ``parameters`` entry.
+        features : Tensor
+            Features to transform.
+
+        Returns
+        -------
+        Tensor
+            Transformed features.
+
+        Raises
+        ------
+        ValueError
+            If no ``parameters`` input is available.
+        """
         if "parameters" not in inputs:
             raise ValueError("Featurewise transformations require 'parameters'.")
         x = inputs["parameters"]

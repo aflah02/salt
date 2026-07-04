@@ -5,7 +5,7 @@
 
 # Salt
 
-This is the home of Salt, a framework for training multi-model and multi-task models in the style of GN2.
+This is the home of Salt, a framework for training multi-modal and multi-task models in the style of GN2.
 
 Documentation is available [here](https://ftag-salt.docs.cern.ch/).
 

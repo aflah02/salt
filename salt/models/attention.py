@@ -559,6 +559,18 @@ class EdgeAttention(nn.Module):
         self.reset_parameters()
 
     def set_backend(self, attn_type: str) -> str:
+        """Ignore backend changes, since EdgeAttention only supports raw attention.
+
+        Parameters
+        ----------
+        attn_type : str
+            Requested attention backend.
+
+        Returns
+        -------
+        str
+            The requested backend, unchanged.
+        """
         warnings.warn(
             "EdgeAttention does not support different backends yet. Using raw attention.",
             stacklevel=2,

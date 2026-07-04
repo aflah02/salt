@@ -42,6 +42,15 @@ For a full list of available arguments run
 salt fit --help
 ```
 
+In addition to the config-derived arguments, salt provides a few flags of its own:
+
+- `-n`, `--name`: name for the training run (default `salt`), used for the log directory and the output names of the trained model.
+- `-f`, `--force`: run with uncommitted changes, see [reproducibility][commit-hashes-tags].
+- `-t`, `--tag`: push a tag of the current code, see [reproducibility][commit-hashes-tags].
+- `--compile`: compile the model to speed up training, see [compiled models][compiled-models].
+- `-oc`, `--overwrite_config`: overwrite an existing saved config in the output directory.
+- `-ls`, `--log_suffix`: appended to the model name to build the log directory name, instead of the default timestamp.
+
 
 #### Choosing GPUs
 
@@ -56,7 +65,7 @@ Take a look [here](https://pytorch-lightning.readthedocs.io/en/latest/accelerato
 #### Resuming Training
 
 Model checkpoints are saved in timestamped directories under `logs/`.
-These directories also get a copy of the fully merging training config (`config.yaml`), and a copy of the umami scale dict.
+These directories also get a copy of the fully merged training config (`config.yaml`), and a copy of the norm dict.
 To resume a training, point to a previously saved config and a `.ckpt` checkpoint file by using the `--ckpt_path` argument.
 
 ```bash
@@ -125,7 +134,16 @@ Test different counts to find the optimal value, or just set this to the number 
     ```
 
     You should not use more workers than this.
-    If you use too few or too many workers, you will see a warning at the start of training.
+    If your worker count is low enough to bottleneck the dataloading, Lightning will suggest a higher value at the start of training.
+
+#### Dataloader Tuning
+
+A few more keys in the `data` config control the dataloader behaviour:
+
+- `pin_memory` (default `True`): use pinned host memory for faster CPU-to-GPU transfers.
+- `persistent_workers` (default `True`): keep worker processes alive between epochs to avoid re-spawning them.
+- `prefetch_factor` (default `2`): number of batches prefetched by each worker.
+- `multiprocessing_context` (default `None`, i.e. the PyTorch default): start method for the worker processes, one of `fork`, `spawn` or `forkserver`. Using `spawn` can make parallel HDF5 reads more robust by preventing file handles from being inherited across processes, which is particularly relevant for DDP trainings on Linux, at the cost of a slightly slower worker startup.
 
 #### Fast Disk Access
 
@@ -180,7 +198,7 @@ Where arguments need to agree between Slurm and Pytorch Lightning, such as ntask
 Lightning has the ability to requeue a job if it is killed by Slurm for exceeding the system walltime. The training state is saved in a checkpoint and loaded when the new job begins. submit_slurm.py creates a single log directory holding the checkpoints for the original and any requeue-d jobs (in the below example GN2_my_requeue_job).
 
 ```bash
-python submit/submit_slurm.py --config configs/GN2/GN2.yaml --requeue --salt_log_dir=my_requeue_job --signal=SIGUSR1@90
+python submit/submit_slurm.py --config configs/GN2/GN2.yaml --requeue --salt_log_suffix=my_requeue_job --signal=SIGUSR1@90
 ```
 
 There are many options for both Slurm and Salt, not all of which are explicitly handled but which should be available to a user if needed. To access these you can add `slurm.` (for Slurm) or `config.` (for Salt) to the beginning of an argument and it will be converted into a valid argument. Note that the "=" should be used in this case instead of a space.
@@ -230,7 +248,7 @@ If you are not producing a "final" version of your model (i.e. with maximum poss
 Other things you can always do:
 
 - Use bfloat16 precision
-- Use the flash attention backend for the [`Transformer` class](https://gitlab.cern.ch/svanstro/hepformer/-/blob/main/hepformer/models/transformer.py)
+- Use the flash attention backend for the [`Transformer` class](https://gitlab.cern.ch/aft/algorithms/salt/-/blob/main/salt/models/transformer.py)
 - Use the maximum possible [batch size](https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.BatchSizeFinder.html)
 - Increase your effective batch size by [accumulating gradients](https://lightning.ai/docs/pytorch/stable/advanced/training_tricks.html#accumulate-gradients)
 - Ensure you have enough [workers for dataloading](worker-counts)

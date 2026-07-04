@@ -70,6 +70,18 @@ class InitNet(nn.Module):
         self.featurewise = featurewise
 
     def forward(self, inputs: Tensors):
+        """Embed the inputs of this input type, attaching global features and parameters.
+
+        Parameters
+        ----------
+        inputs : Tensors
+            Input tensors keyed by input type.
+
+        Returns
+        -------
+        Tensor
+            Initial embedding of shape ``(batch, constituents, output_size)``.
+        """
         # get the inputs for this init net
         x = inputs[self.input_name]
 

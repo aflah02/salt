@@ -143,6 +143,7 @@ class IntegratedGradientWriter(Callback):
         self.input_keys = input_keys
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:  # noqa: ARG002
+        """Grab the test dataset and resolve the number of jets and batch size."""
         if stage != "test":
             return
         self.trainer = trainer
@@ -164,6 +165,7 @@ class IntegratedGradientWriter(Callback):
 
     @property
     def output_path(self) -> Path:
+        """Path of the output attributions h5 file, next to the checkpoint."""
         out_dir = Path(self.trainer.ckpt_path).parent
         out_basename = str(Path(self.trainer.ckpt_path).stem)
         stem = str(Path(self.ds.filename).stem)
@@ -171,7 +173,21 @@ class IntegratedGradientWriter(Callback):
         suffix = f"_{self.test_suff}" if self.test_suff is not None else ""
         return Path(out_dir / f"{out_basename}__attributions_{sample}{suffix}.h5")
 
-    def on_test_start(self, trainer, pl_module):  # noqa: ARG002
+    def on_test_start(self, trainer: Trainer, pl_module: LightningModule) -> None:  # noqa: ARG002
+        """Compute integrated-gradients attributions and write them to h5.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        pl_module : LightningModule
+            The model being tested.
+
+        Raises
+        ------
+        FileExistsError
+            If the output file exists and ``overwrite`` is not set.
+        """
         print("Will run Integrated Gradients on test set")
         print("This may take a while!")
         print(f"\nSaving attributions to {self.output_path}")

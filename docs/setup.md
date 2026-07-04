@@ -99,6 +99,8 @@ Salt requires Python 3.11 to 3.14.
             /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/aft/algorithms/salt:latest/
         ```
 
+        The repository also ships a small helper script, `setup/run_container.sh`, which launches the latest CVMFS image with some common bind mounts.
+
         The image comes with salt installed under `/salt/`, but if you want an editable install, you can follow the package install instructions [below](#install-the-salt-package).
 
     === "Pull the image"
@@ -213,16 +215,13 @@ To verify your installation, you can run the [test suite](contributing.md#test-s
 
 ??? failure "`RuntimeError: The NVIDIA driver on your system is too old` when running salt"
 
-    If you see the following error when running `salt fit`, then you need to install suitable pytorch version.
-    You can read about available versions [here](https://pytorch.org/get-started/locally/).
-
-    First, create a new conda environment and activate it.
-    Assuming, you have chosen `pytorch-cuda=11.8`, run in the new conda environment:
-    ```
-    mamba install pytorch pytorch-cuda=11.8 -c pytorch -c nvidia
-    ```
-
-    and then re-run `uv sync`.
+    If you see the following error when running `salt fit`, the pinned pytorch build requires a newer
+    NVIDIA driver than the one on your system.
+    The recommended solution is to update the driver, or to run inside the salt container image
+    (which ships a compatible CUDA runtime).
+    Alternatively you can install a pytorch build for an older CUDA version
+    (see [here](https://pytorch.org/get-started/locally/)) into your environment with `uv pip install`,
+    but note that a plain `uv sync` will re-pin the default pytorch version and undo this.
 
 
 ??? info "Installing `h5ls`"

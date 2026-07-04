@@ -19,7 +19,7 @@ to_onnx \
     --name GN2vXX
 ```
 
-If you don't specify a config path using `--config`, the script will look for one in the parent dir of the specified `--ckpt_path`.
+If you don't specify a config path using `--config`, the script will look for a `config.yaml` in the run directory, i.e. one level above the `ckpts/` dir containing the specified `--ckpt_path`.
 
 ??? warning "The `r22default` track selection is used by default"
 
@@ -32,7 +32,7 @@ If you don't specify a config path using `--config`, the script will look for on
     [training-dataset-dumper!427](https://gitlab.cern.ch/aft/algorithms/training-dataset-dumper/-/merge_requests/427)
     to make sure you are using the correct selection.
 
-You can also optionally specify a different scale dict to the one in the training config, and a model name (by default this is `salt`).
+You can also optionally specify a model name with `--name` (by default this is taken from the `name` in the training config).
 The model name is used to construct the output probability variable names in Athena.
 
 ??? tip "Exporting a model trained with `torch.compile()`."
