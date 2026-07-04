@@ -39,6 +39,18 @@ class EdgeConstructor(nn.Module):
             self.indices_map = indices_map
 
     def forward(self, inputs: Tensors) -> Tensors:
+        """Compute the edge features and add them to the inputs dict.
+
+        Parameters
+        ----------
+        inputs : Tensors
+            Input tensors, updated with an ``_edge_features_<input_name>`` entry.
+
+        Returns
+        -------
+        Tensors
+            The updated inputs.
+        """
         x = inputs[self.input_name]
         ebatch = calculate_edge_features(x, self.indices_map, self.edge_features)
         inputs[f"_edge_features_{self.input_name}"] = ebatch

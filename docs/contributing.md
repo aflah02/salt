@@ -30,18 +30,17 @@ The following procedure should be followed:
 ### Code Standards
 
 Good coding standards are highly encouraged.
-You can take a look at the [umami docs](https://umami-docs.web.cern.ch/setup/development/) or the coding style [tutorial](https://ftag.docs.cern.ch/software/tutorials/tutorial-coding/) for guidance on code style.
+You can take a look at the coding style [tutorial](https://ftag.docs.cern.ch/software/tutorials/tutorial-coding/) for guidance on code style.
 In short, aim to write clean, readible and type-hinted code with module and function docstrings, and plenty of inline comments.
-Code is formatted using [black](https://github.com/psf/black) (this is enforced by the pre-commit checks).
+Code is formatted and linted using [ruff](https://docs.astral.sh/ruff/) (this is enforced by the pre-commit checks).
 
 VS Code is the recommended editor when developing for salt.
 The package comes with some recommended extensions which you can review and install by running the `Extensions: Show Recommended Extensions` command.
-See also the [umami guide](https://umami-docs.web.cern.ch/setup/development/VS_code/) for development with VS Code.
 
 ### Pre-commit Checks
 
 The `pre-commit` framework is used to ensure contributions follow good coding standards.
-It is installed as a package dependency.
+It is part of the `dev` dependency group, so make sure you installed salt with `uv sync --group dev`.
 To set it up, just run the following from the top level of the package.
 
 ```bash

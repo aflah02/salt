@@ -26,6 +26,7 @@ class ConfusionMatrixCallback(Callback):
         self.class_names_override = class_names_override
 
     def setup(self, trainer: Trainer, _pl_module: LightningModule, stage: str) -> None:
+        """Look up the monitored task and resolve the class names to log."""
         if stage != "fit":
             return
 
@@ -53,6 +54,7 @@ class ConfusionMatrixCallback(Callback):
         _batch_idx: int,
         _dataloader_idx: int = 0,
     ) -> None:
+        """Accumulate predicted and true labels from the validation batch."""
         pred_labels_batch = torch.argmax(
             outputs["outputs"]["preds"][self.task_input_name][self.task_name], dim=-1
         )
@@ -68,6 +70,7 @@ class ConfusionMatrixCallback(Callback):
         trainer: Trainer,
         _pl_module: LightningModule,
     ) -> None:
+        """Log the confusion matrix to Comet and reset the accumulated labels."""
         if isinstance(trainer.logger, CometLogger):
             # Log the confusion matrix to Comet
             trainer.logger.experiment.log_confusion_matrix(

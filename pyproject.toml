@@ -104,7 +104,7 @@ line-length = 100
 preview = true
 lint.select = ["ALL"]
 lint.ignore = [
-  "COM", "D100", "D102", "D105", "D205", "D401", "EM", "FIX", "FBT",
+  "COM", "D100", "D105", "D205", "D401", "EM", "FIX", "FBT",
   "S101", "S404", "S602", "PLR2004", "PLR0912", "PLR0914", "CPY001", "TRY003",
   "G004", "N802", "C901", "DTZ005", "DTZ007", "INP", "EXE002",
   "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204",

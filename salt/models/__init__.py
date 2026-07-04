@@ -1,5 +1,6 @@
 """Model definitions from the SALT framework."""
 
+from salt.models.custom_losses import BetaNLLLoss
 from salt.models.dense import Dense
 from salt.models.edge_constructor import EdgeConstructor
 from salt.models.featurewise import FeaturewiseTransformation
@@ -27,6 +28,7 @@ from salt.models.transformer import Transformer
 from salt.models.transformer_v2 import TransformerV2
 
 __all__ = [
+    "BetaNLLLoss",
     "ClassificationTask",
     "Dense",
     "EdgeConstructor",

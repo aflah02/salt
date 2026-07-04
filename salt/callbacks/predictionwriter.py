@@ -65,6 +65,22 @@ class PredictionWriter(Callback):
         self.object_classes = object_classes
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:
+        """Cache dataset info from the test dataloader and validate ``extra_vars``.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        module : LightningModule
+            The model being tested.
+        stage : str
+            Stage being set up, only ``"test"`` is handled.
+
+        Raises
+        ------
+        ValueError
+            If configured extra variables are missing from the test file.
+        """
         if stage != "test":
             return
 
@@ -186,6 +202,7 @@ class PredictionWriter(Callback):
 
     @property
     def output_path(self) -> Path:
+        """Path of the output evaluation h5 file, next to the checkpoint."""
         out_dir = Path(self.trainer.ckpt_path).parent
         out_basename = str(Path(self.trainer.ckpt_path).stem)
         stem = str(Path(self.ds.filename).stem)
@@ -250,6 +267,7 @@ class PredictionWriter(Callback):
         self.writer.write(to_write)
 
     def on_test_batch_end(self, trainer, module, outputs, batch, batch_idx):  # noqa: ARG002
+        """Collect task outputs and extra variables and write them for this batch."""
         preds = outputs
         _, pad_masks, labels = batch
         add_mask = False
@@ -326,5 +344,6 @@ class PredictionWriter(Callback):
         self._write_batch_outputs(to_write, out_pads, batch_idx)
 
     def on_test_end(self, trainer, module):  # noqa: ARG002
+        """Close the output h5 writer."""
         if self.writer is not None:
             self.writer.close()

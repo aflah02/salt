@@ -20,9 +20,9 @@ user/
 
 # Ignore files containing 'log' in their name
 *log*
-# But don't ignore these two...
-!gradient_logger
-!weight_logger
+# But not these tracked source files
+!*_logger.py
+!clean_logs.py
 
 *.pyc
 *.xml

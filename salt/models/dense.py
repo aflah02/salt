@@ -89,6 +89,20 @@ class Dense(nn.Module):
             self._reset_parameters()
 
     def forward(self, x: Tensor, context: Tensor | None = None) -> Tensor:
+        """Apply the network, attaching the context to the input if configured.
+
+        Parameters
+        ----------
+        x : Tensor
+            Input tensor.
+        context : Tensor | None, optional
+            Context tensor concatenated onto the input, by default None.
+
+        Returns
+        -------
+        Tensor
+            Network output.
+        """
         if self.context_size:
             x = attach_context(x, context)
         return self.net(x)

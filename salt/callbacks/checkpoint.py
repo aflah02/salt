@@ -27,6 +27,22 @@ class Checkpoint(ModelCheckpoint):
         super().__init__(save_top_k=-1, filename=filename, auto_insert_metric_name=False)
 
     def setup(self, trainer: Trainer, pl_module: LightningModule, stage: str) -> None:
+        """Set the checkpoint directory to ``ckpts/`` in the (possibly S3) log dir.
+
+        Parameters
+        ----------
+        trainer : Trainer
+            The trainer instance.
+        pl_module : LightningModule
+            The model being trained.
+        stage : str
+            Stage being set up, only ``"fit"`` is handled.
+
+        Raises
+        ------
+        ValueError
+            If an S3 log dir is configured but s3path is unavailable, or malformed.
+        """
         if stage == "fit":
             if trainer.fast_dev_run:
                 return

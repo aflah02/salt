@@ -28,6 +28,7 @@ nav = [
     { "Transformer" = "api/transformer.md" },
     { "Models" = "api/models.md" },
     { "Tasks" = "api/tasks.md" },
+    { "Callbacks" = "api/callbacks.md" },
   ] },
   { "Docs development" = "docs_development.md" },
 ]

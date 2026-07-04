@@ -31,6 +31,7 @@ class PerformanceWriter(Callback):
         self.std_out = std_out
 
     def setup(self, trainer: Trainer, module: LightningModule, stage: str) -> None:  # noqa: ARG002
+        """Create the ``performance_metric.json`` output file in the log dir."""
         if trainer.fast_dev_run:
             return
 
@@ -41,6 +42,7 @@ class PerformanceWriter(Callback):
             pass
 
     def on_validation_epoch_end(self, trainer, module) -> None:
+        """Append the tracked metrics as a json line, optionally printing to stdout."""
         if trainer.state.stage != "validate" or trainer.fast_dev_run:
             return
 

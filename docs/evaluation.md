@@ -11,7 +11,7 @@ salt test --config logs/<timestamp>/config.yaml --data.test_file path/to/test.h5
 ```
 
 As in the above example, you need to specify the saved config from the training run.
-By default, the checkpoint with the lowest validation loss is used for training.
+By default, the checkpoint with the lowest validation loss is used for evaluation.
 You can specify a different checkpoint with the `--ckpt_path` argument.
 
 ??? warning "When evaluating a model from a [resumed training][resuming-training], you need to explicitly specify `--ckpt_path`."
@@ -50,10 +50,10 @@ The variables can be configured as follows within the `PredictionWriter` callbac
 callbacks:
     - class_path: salt.callbacks.Checkpoint
       init_args:
-        monitor_loss: val/jet_classification_loss
+        monitor_loss: val/jets_classification_loss
     - class_path: salt.callbacks.PredictionWriter
       init_args:
-        write_tracks: False
+        write_tracks: True
         extra_vars:
           jets:
             - pt_btagJes
@@ -61,7 +61,7 @@ callbacks:
             - HadronConeExclTruthLabelID
             - n_tracks
             - n_truth_promptLepton
-            tracks:
+          tracks:
             - truthOriginLabel
             - truthVertexIndex
 ```

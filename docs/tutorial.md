@@ -137,7 +137,7 @@ An example script is provided here. You should have installed the dependencies `
     from puma import Roc, RocPlot
     from puma.metrics import calc_rej
 
-    fname = "logs/GN2_<timestamp>/ckpts/epoch<best epoch>.h5"
+    fname = "logs/GN2_<timestamp>/ckpts/epoch=<best epoch>-val_loss=<loss>__test_pp_output_test_ttbar.h5"
     reader = H5Reader(fname, batch_size=1_000)
     df = pd.DataFrame(reader.load({"jets": ["pt", "eta", "flavour", "GN2_pu", "GN2_pc", "GN2_pb"]}, num_jets=10_000)['jets'])
 
@@ -204,10 +204,10 @@ In this step you will modify the model by editing the configuration file. Note t
 Look for the following lines and comment them out or remove them:
 
 ```yaml
-- class_path: salt.models.ClassificationTask
+            - class_path: salt.models.ClassificationTask
               init_args:
                 name: const_origin
-                input_name: consts
+                input_name: tracks
                 label: truth_origin_label
                 class_names: [pileup, primary, fromBC, fromB, fromC, fromS, fromTau*, secondary]
                 weight: 0.5
@@ -223,7 +223,7 @@ Look for the following lines and comment them out or remove them:
             - class_path: salt.models.VertexingTask
               init_args:
                 name: const_vertexing
-                input_name: consts
+                input_name: tracks
                 label: truth_vertex_idx
                 weight: 1.5
                 loss:
@@ -269,11 +269,11 @@ Now you can compare the performance between the two models with the following sc
     from puma import Roc, RocPlot
     from puma.metrics import calc_rej
 
-    fname_default = "logs/GN2_<timestamp>/ckpts/epoch<best epoch>.h5"
+    fname_default = "logs/GN2_<timestamp>/ckpts/epoch=<best epoch>-val_loss=<loss>__test_pp_output_test_ttbar.h5"
     reader_default = H5Reader(fname_default, batch_size=1_000)
     df_default = pd.DataFrame(reader_default.load({"jets": ["pt", "eta", "flavour", "GN2_pu", "GN2_pc", "GN2_pb"]}, num_jets=10_000)['jets'])
 
-    fname_ablation = "logs/GN2_<new timestamp>/ckpts/epoch<best epoch>.h5"
+    fname_ablation = "logs/GN2_<new timestamp>/ckpts/epoch=<best epoch>-val_loss=<loss>__test_pp_output_test_ttbar.h5"
     reader_ablation = H5Reader(fname_ablation, batch_size=1_000)
     df_ablation = pd.DataFrame(reader_ablation.load({"jets": ["pt", "eta", "flavour", "GN2_pu", "GN2_pc", "GN2_pb"]}, num_jets=10_000)['jets'])
 
@@ -370,7 +370,7 @@ Read the documentation for [onnx export](export.md) with salt.
 
 To do this, run
 ```
-to_onnx --ckpt_path logs/GN2_<timestamp>/<best_checkpoint>.ckpt --name MyModel
+to_onnx --ckpt_path logs/GN2_<timestamp>/ckpts/<best_checkpoint>.ckpt --name MyModel
 ```
 
 Once completed, your ONNX model will be saved in `logs/GN2_<timestamp>/network.onnx`. 
