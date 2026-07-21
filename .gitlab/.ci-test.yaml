@@ -23,20 +23,7 @@
 unit-tests:
   extends: .test-template
   script:
-    - JUNIT_FILE=reports/unit-attention.xml run_test salt/tests/test_attention.py
-    - JUNIT_FILE=reports/unit-cli.xml run_test salt/tests/test_cli.py
-    - JUNIT_FILE=reports/unit-datasets.xml run_test salt/tests/test_datasets.py
-    - JUNIT_FILE=reports/unit-edges.xml run_test salt/tests/test_edges.py
-    - JUNIT_FILE=reports/unit-featurewise.xml run_test salt/tests/test_featurewise.py
-    - JUNIT_FILE=reports/unit-initnet.xml run_test salt/tests/test_initnet.py
-    - JUNIT_FILE=reports/unit-masks.xml run_test salt/tests/test_masks.py
-    - JUNIT_FILE=reports/unit-models.xml run_test salt/tests/test_models.py
-    - JUNIT_FILE=reports/unit-optimizer.xml run_test salt/tests/test_optimizer.py
-    - JUNIT_FILE=reports/unit-posenc.xml run_test salt/tests/test_posenc.py
-    - JUNIT_FILE=reports/unit-to_onnx.xml run_test salt/tests/test_to_onnx.py
-    - JUNIT_FILE=reports/unit-transformer.xml run_test salt/tests/test_transformer.py
-    - JUNIT_FILE=reports/unit-union_find.xml run_test salt/tests/test_union_find.py
-    - JUNIT_FILE=reports/unit-utils.xml run_test salt/tests/test_utils.py
+    - JUNIT_FILE=reports/unit.xml run_test salt/tests --ignore=salt/tests/test_pipeline.py
 
 # --------------------------- PIPELINE TESTS ---------------------------
 test-dev:
@@ -108,7 +95,7 @@ test-regression:
     - JUNIT_FILE=reports/regression-gauss.xml run_test salt/tests/test_pipeline.py::test_regression_gaussian
     - JUNIT_FILE=reports/regression-betaNLL.xml run_test salt/tests/test_pipeline.py::test_regression_betaNLL
     - JUNIT_FILE=reports/regression-multi-target.xml run_test salt/tests/test_pipeline.py::test_regression_multi_target
-    - JUNIT_FILE=reports/regression.xml run_test salt/tests/test_pipeline.py::test_regression_weighted
+    - JUNIT_FILE=reports/regression-weighted.xml run_test salt/tests/test_pipeline.py::test_regression_weighted
 
 test-truncate-inputs:
   extends: .test-template

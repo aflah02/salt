@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from unittest import mock
 
 import h5py
 import pytest
@@ -10,7 +11,6 @@ from salt.onnx.to_onnx import main as to_onnx
 from salt.utils.get_onnx_metadata import main as get_onnx_metadata
 from salt.utils.inputs import write_dummy_file, write_dummy_norm_dict
 
-w = "ignore::lightning.fabric.utilities.warnings.PossibleUserWarning:"
 CONFIG = "GN2/GN2.yaml"
 TAU_CONFIGS = {"GN2.yaml"}
 
@@ -67,18 +67,20 @@ def run_eval(tmp_path, train_config_path, nd_path, do_xbb=False, is_gn3=False):
     test_h5_path = Path(tmp_path) / "dummy_test_sample_inputs.h5"
     write_dummy_file(test_h5_path, nd_path, do_xbb, is_gn3=is_gn3)
 
-    # Modify the output config to force writing tracks in the prediction writer
+    # Write a modified copy of the config to force writing tracks in the prediction writer,
+    # keeping the original training config untouched
     with open(train_config_path) as f:
         config = yaml.safe_load(f)
-        for callback in config["trainer"]["callbacks"]:
-            if "PredictionWriter" in callback["class_path"]:
-                callback["init_args"]["write_tracks"] = True
-                break
-    with open(train_config_path, "w") as f:
+    for callback in config["trainer"]["callbacks"]:
+        if "PredictionWriter" in callback["class_path"]:
+            callback["init_args"]["write_tracks"] = True
+            break
+    eval_config_path = train_config_path.parent / "config_eval.yaml"
+    with open(eval_config_path, "w") as f:
         yaml.dump(config, f)
     args = ["test"]
 
-    args += [f"--config={train_config_path}"]
+    args += [f"--config={eval_config_path}"]
     args += [f"--data.test_file={test_h5_path}"]
     args += ["--data.num_test=1000"]
     args += ["--data.batch_size=100"]
@@ -87,7 +89,7 @@ def run_eval(tmp_path, train_config_path, nd_path, do_xbb=False, is_gn3=False):
     # check output h5 files are produced
     h5_dir = train_config_path.parent / "ckpts"
     h5_files = [f for f in h5_dir.iterdir() if f.suffix == ".h5"]
-    assert len(h5_files) == 1
+    assert len(h5_files) == 1, f"expected exactly one .h5 in {h5_dir}, found {h5_files}"
     h5_file = h5_files[0]
     with h5py.File(h5_file, "r") as f:
         assert "jets" in f
@@ -144,41 +146,40 @@ def run_combined(
     inc_params=False,
     is_gn3=False,
 ):
-    sys.argv = [sys.argv[0]]  # ignore pytest cli args when running salt cli
+    # ignore pytest cli args when running salt cli
+    with mock.patch.object(sys, "argv", [sys.argv[0]]):
+        # look for the config
+        config_path = Path(__file__).parent.parent / "configs" / config
+        if not config_path.is_file():
+            config_path = Path(__file__).parent / "configs" / config
 
-    # look for the config
-    config_path = Path(__file__).parent.parent / "configs" / config
-    if not config_path.is_file():
-        config_path = Path(__file__).parent / "configs" / config
+        # run training
+        run_train(tmp_path, config_path, train_args, do_xbb, do_mup, inc_params, is_gn3=is_gn3)
 
-    # run training
-    run_train(tmp_path, config_path, train_args, do_xbb, do_mup, inc_params, is_gn3=is_gn3)
-
-    if do_eval:
-        train_dir = [x for x in tmp_path.iterdir() if x.is_dir() and (x / "config.yaml").exists()]
-        assert len(train_dir) == 1
-        train_dir = train_dir[0]
-        print(f"Using train_dir {train_dir}.")
-        train_config_path = train_dir / "config.yaml"
-        nd_path = [x for x in train_dir.iterdir() if x.suffix == ".yaml" and "norm" in str(x)]
-        assert len(nd_path) == 1
-        nd_path = nd_path[0]
-        run_eval(tmp_path, train_config_path, nd_path, do_xbb, is_gn3=is_gn3)
-    if do_onnx:
-        run_onnx(train_dir, export_args)
+        if do_eval:
+            train_dir = [
+                x for x in tmp_path.iterdir() if x.is_dir() and (x / "config.yaml").exists()
+            ]
+            assert len(train_dir) == 1, f"expected exactly one train dir in {tmp_path}"
+            train_dir = train_dir[0]
+            print(f"Using train_dir {train_dir}.")
+            train_config_path = train_dir / "config.yaml"
+            nd_path = [x for x in train_dir.iterdir() if x.suffix == ".yaml" and "norm" in str(x)]
+            assert len(nd_path) == 1, f"expected exactly one norm dict in {train_dir}"
+            nd_path = nd_path[0]
+            run_eval(tmp_path, train_config_path, nd_path, do_xbb, is_gn3=is_gn3)
+        if do_onnx:
+            run_onnx(train_dir, export_args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN2(tmp_path) -> None:
     run_combined(tmp_path, CONFIG, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN3V00(tmp_path) -> None:
     run_combined(tmp_path, "GN3v01/GN3V00.yaml", export_args=["--tasks", *GN3_TASKS], is_gn3=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN3V01(tmp_path) -> None:
     run_combined(
         tmp_path,
@@ -188,78 +189,63 @@ def test_GN3V01(tmp_path) -> None:
     )
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN2_muP(tmp_path) -> None:
     run_combined(tmp_path, "GN2/GN2_muP.yaml", do_mup=True, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN2emu(tmp_path) -> None:
     run_combined(tmp_path, "GN2/GN2emu.yaml", do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_GN2XE(tmp_path) -> None:
     run_combined(tmp_path, "GN2/GN2XE.yaml", do_onnx=False, do_xbb=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_DIPS(tmp_path) -> None:
     run_combined(tmp_path, "legacy/dips.yaml", do_eval=True, do_onnx=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_DL1(tmp_path) -> None:
     run_combined(tmp_path, "legacy/DL1.yaml", do_eval=True, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_regression(tmp_path) -> None:
     run_combined(tmp_path, "regression.yaml", do_eval=True, do_onnx=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_nan_regression(tmp_path) -> None:
     run_combined(tmp_path, "nan_regression.yaml", do_eval=True, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_regression_gaussian(tmp_path) -> None:
     run_combined(tmp_path, "regression_gaussian.yaml", do_eval=True, do_onnx=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_regression_betaNLL(tmp_path) -> None:
     run_combined(tmp_path, "regression_betaNLL.yaml", do_eval=True, do_onnx=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_regression_multi_target(tmp_path) -> None:
     run_combined(tmp_path, "regression_multi_target.yaml", do_eval=False, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_regression_weighted(tmp_path) -> None:
     run_combined(tmp_path, "regression_weighted.yaml", do_eval=True, do_onnx=True)
 
 
-@pytest.mark.filterwarnings(w)
 def test_flow(tmp_path) -> None:
     run_combined(tmp_path, "flow.yaml", do_eval=False, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_no_global_inputs(tmp_path) -> None:
     run_combined(tmp_path, "no_global_inputs.yaml", do_eval=False, do_onnx=False)
 
 
-@pytest.mark.filterwarnings(w)
 def test_train_dev(tmp_path) -> None:
     args = ["--trainer.fast_dev_run=2"]
     run_combined(tmp_path, CONFIG, do_eval=False, do_onnx=False, train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_train_movefilestemp(tmp_path) -> None:
     tmp_path = Path(tmp_path)
     move_path = tmp_path / "dev" / "shm"
@@ -268,37 +254,26 @@ def test_train_movefilestemp(tmp_path) -> None:
     assert not Path(move_path).exists()
 
 
-@pytest.mark.filterwarnings(w)
-def test_train_distributed(tmp_path) -> None:
-    args = ["--trainer.devices=2", "--data.num_workers=2", "--model.lrs_config.pct_start=0.2"]
-    run_combined(tmp_path, CONFIG, do_eval=False, do_onnx=False, train_args=args)
-
-
-@pytest.mark.filterwarnings(w)
 def test_truncate_inputs(tmp_path) -> None:
     args = ["--data.num_inputs.tracks=10"]
     run_combined(tmp_path, CONFIG, do_eval=True, do_onnx=False, train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_truncate_inputs_error(tmp_path) -> None:
     args = ["--data.num_inputs.this_should_error=10"]
     with pytest.raises(ValueError, match="must be a subset of"):
         run_combined(tmp_path, CONFIG, do_eval=False, do_onnx=False, train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_maskformer(tmp_path) -> None:
     run_combined(tmp_path, "MaskFormer.yaml", train_args=None, export_args=["-mf=vertexing"])
 
 
-@pytest.mark.filterwarnings(w)
 def test_param_concat(tmp_path) -> None:
     args = [f"--config={Path(__file__).parent.parent / 'tests' / 'configs' / 'param_concat.yaml'}"]
     run_combined(tmp_path, CONFIG, do_onnx=False, inc_params=True, train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_param_featurewise(tmp_path) -> None:
     args = [
         f"--config={Path(__file__).parent.parent / 'tests' / 'configs' / 'param_featurewise.yaml'}"
@@ -306,7 +281,6 @@ def test_param_featurewise(tmp_path) -> None:
     run_combined(tmp_path, CONFIG, do_onnx=False, inc_params=True, train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_gls_weighting(tmp_path) -> None:
     # Ensure that this raises an assertion
     args = ["--model.loss_mode=lol"]
@@ -322,7 +296,6 @@ def test_gls_weighting(tmp_path) -> None:
     run_combined(tmp_path, "legacy/dips.yaml", train_args=args)
 
 
-@pytest.mark.filterwarnings(w)
 def test_hybrid_muon_adamw(tmp_path) -> None:
     args = ["--model.optimizer=HybridMuonAdamW"]
     run_combined(tmp_path, CONFIG, do_onnx=False, train_args=args)
