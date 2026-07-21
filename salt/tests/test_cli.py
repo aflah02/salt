@@ -5,7 +5,7 @@ import pytest
 from salt.callbacks import SaveConfigCallback
 from salt.data.datamodules import SaltDataModule
 from salt.modelwrapper import ModelWrapper
-from salt.utils.cli import SaltCLI
+from salt.utils.cli import SaltCLI, get_best_epoch
 from salt.utils.inputs import write_dummy_file, write_dummy_norm_dict
 
 
@@ -48,3 +48,21 @@ def test_initialization(test_files) -> None:
             "default_config_files": [f"{config_dir}/test_config.yaml"],
         },
     )
+
+
+def test_get_best_epoch(tmp_path):
+    ckpt_dir = tmp_path / "ckpts"
+    ckpt_dir.mkdir()
+    (ckpt_dir / "epoch=000-loss=0.50.ckpt").touch()
+    (ckpt_dir / "epoch=001-loss=0.25.ckpt").touch()
+    best = get_best_epoch(tmp_path / "config.yaml")
+    assert best.endswith("epoch=001-loss=0.25.ckpt")
+
+
+def test_get_best_epoch_negative_loss(tmp_path):
+    ckpt_dir = tmp_path / "ckpts"
+    ckpt_dir.mkdir()
+    (ckpt_dir / "epoch=000-loss=0.50.ckpt").touch()
+    (ckpt_dir / "epoch=001-loss=-0.25.ckpt").touch()
+    best = get_best_epoch(tmp_path / "config.yaml")
+    assert best.endswith("epoch=001-loss=-0.25.ckpt")
