@@ -1,7 +1,9 @@
 pre-commit:
   stage: lint
   needs: []
-  image: registry.cern.ch/docker.io/library/python:3.11.2
+  # python:3.11.2 (bullseye) ships git 2.30, too old for pre-commit >= 4.6.1
+  # which runs `git ls-files --deduplicate` (needs git >= 2.31)
+  image: registry.cern.ch/docker.io/library/python:3.11
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: never
