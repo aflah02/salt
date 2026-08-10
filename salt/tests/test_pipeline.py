@@ -48,6 +48,8 @@ def run_train(
     args += ["--trainer.max_epochs=1"]
     args += ["--trainer.accelerator=cpu"]
     args += ["--trainer.devices=1"]
+    args += ["--trainer.num_nodes=1"]
+    args += ["--trainer.precision=32-true"]
     args += [f"--trainer.default_root_dir={tmp_path}"]
     args += ["--trainer.logger.init_args.online=False"]
 
@@ -199,6 +201,14 @@ def test_GN2emu(tmp_path) -> None:
 
 def test_GN2XE(tmp_path) -> None:
     run_combined(tmp_path, "GN2/GN2XE.yaml", do_onnx=False, do_xbb=True)
+
+
+def test_ParT(tmp_path) -> None:
+    run_combined(tmp_path, "ParticleTransformer/ParT.yaml", do_onnx=False, is_gn3=True)
+
+
+def test_DeParT(tmp_path) -> None:
+    run_combined(tmp_path, "ParticleTransformer/DeParT.yaml", do_onnx=False, is_gn3=True)
 
 
 def test_DIPS(tmp_path) -> None:

@@ -26,13 +26,15 @@ def check_edge_config(
         If an edge feature is not recognized or if required indices are missing.
     """
     req_vars: list[str] = []
+    needs_angular = False  # dR/kt use angular differences (eta/phi or jet-relative deta/dphi)
     for variable in edge_features:
         if variable == "dR":
-            req_vars.extend(["eta", "phi"])
+            needs_angular = True
         elif variable == "z":
             req_vars.extend(["pt"])
         elif variable == "kt":
-            req_vars.extend(["eta", "phi", "pt"])
+            needs_angular = True
+            req_vars.extend(["pt"])
         elif variable == "isSelfLoop":
             continue
         elif variable == "subjetIndex":
@@ -42,10 +44,15 @@ def check_edge_config(
         else:
             raise ValueError(f"Edge feature {variable} not recognized")
 
-    missing = set(req_vars) - set(available_vars)
+    available = set(available_vars)
+    missing = set(req_vars) - available
     if missing:
         raise ValueError(
             f"Indices of {missing} required for edge features calculation were not specified."
+        )
+    if needs_angular and not ({"eta", "phi"} <= available or {"deta", "dphi"} <= available):
+        raise ValueError(
+            "Edge features 'dR'/'kt' require either 'eta'+'phi' or 'deta'+'dphi' to be specified."
         )
 
 
@@ -78,13 +85,16 @@ def calculate_edge_features(
 
     # intermediate quantities
     if "dR" in variables or "kt" in variables:
-        dphi = batch[:, :, indices_map["phi"]].unsqueeze(1).expand(-1, batch.shape[1], -1) - batch[
-            :, :, indices_map["phi"]
-        ].unsqueeze(2).expand(-1, -1, batch.shape[1])
+        # pairwise dR is reference-invariant, so jet-relative deta/dphi give the same result
+        eta_key = "eta" if "eta" in indices_map else "deta"
+        phi_key = "phi" if "phi" in indices_map else "dphi"
+        dphi = batch[:, :, indices_map[phi_key]].unsqueeze(1).expand(
+            -1, batch.shape[1], -1
+        ) - batch[:, :, indices_map[phi_key]].unsqueeze(2).expand(-1, -1, batch.shape[1])
         dphi -= (dphi > math.pi).type_as(dphi) * 2 * math.pi
-        deta = batch[:, :, indices_map["eta"]].unsqueeze(1).expand(-1, batch.shape[1], -1) - batch[
-            :, :, indices_map["eta"]
-        ].unsqueeze(2).expand(-1, -1, batch.shape[1])
+        deta = batch[:, :, indices_map[eta_key]].unsqueeze(1).expand(
+            -1, batch.shape[1], -1
+        ) - batch[:, :, indices_map[eta_key]].unsqueeze(2).expand(-1, -1, batch.shape[1])
     if "kt" in variables or "z" in variables:
         pt_min = torch.minimum(
             batch[:, :, indices_map["pt"]].unsqueeze(1).expand(-1, batch.shape[1], -1),

@@ -7,6 +7,7 @@ from salt.models.featurewise import FeaturewiseTransformation
 from salt.models.initnet import InitNet
 from salt.models.inputnorm import InputNorm
 from salt.models.pooling import (
+    ClassAttentionPooling,
     GlobalAttentionPooling,
     NodeQueryGAP,
     Pooling,
@@ -29,6 +30,7 @@ from salt.models.transformer_v2 import TransformerV2
 
 __all__ = [
     "BetaNLLLoss",
+    "ClassAttentionPooling",
     "ClassificationTask",
     "Dense",
     "EdgeConstructor",

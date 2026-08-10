@@ -17,6 +17,7 @@ nav = [
   { "Preprocessing" = "preprocessing.md" },
   { "Training" = "training.md" },
   { "Configuration" = "configuration.md" },
+  { "Architectures" = "architectures.md" },
   { "Evaluation" = "evaluation.md" },
   { "ONNX Export" = "export.md" },
   { "Contributing" = "contributing.md" },
