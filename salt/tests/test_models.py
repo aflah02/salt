@@ -1,9 +1,4 @@
-import copy
-
-import numpy as np
-import pytest
 import torch
-from torch import nn
 
 from salt.models import (
     Dense,
@@ -27,7 +22,6 @@ def test_dense_context_broadcast() -> None:
     net(torch.rand(1, 10, 10), torch.rand(1, 4))
 
 
-# @pytest.mark.parametrize("pooling", [GlobalAttentionPooling, TensorCrossAttentionPooling])
 def test_pooling() -> None:
     net = GlobalAttentionPooling(10)
 

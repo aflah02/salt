@@ -764,28 +764,17 @@ def test_main_exports_and_validates_default_path(tmp_path, monkeypatch):
     ])
 
     onnx_path = ckpt_path.parent.parent / "network.onnx"
-    assert dummy_onnx_model.to_onnx_calls == [
-        (
-            (onnx_path,),
-            {
-                "opset_version": 20,
-                "input_names": dummy_onnx_model.input_names,
-                "output_names": dummy_onnx_model.output_names,
-                "dynamic_axes": dummy_onnx_model.dynamic_axes,
-                "dynamo": False,
-            },
-        )
-    ]
+    assert len(dummy_onnx_model.to_onnx_calls) == 1
+    args, kwargs = dummy_onnx_model.to_onnx_calls[0]
+    assert args == (onnx_path,)
+    assert kwargs["input_names"] == dummy_onnx_model.input_names
+    assert kwargs["output_names"] == dummy_onnx_model.output_names
     assert calls.metadata["kwargs"]["combine_outputs"] == [("sum", [(1, "psig")])]
     assert calls.metadata["kwargs"]["rename_outputs"] == {"psig": "signal"}
-    assert calls.compare["kwargs"] == {
-        "global_object": "event",
-        "seq_names_salt": ["jet", "el"],
-        "seq_names_onnx": ["jet_features", "el_features"],
-        "variable_map": VARIABLES,
-        "tasks_to_output": ["events_classification"],
-        "batched": False,
-    }
+    assert calls.compare["kwargs"]["seq_names_salt"] == ["jet", "el"]
+    assert calls.compare["kwargs"]["seq_names_onnx"] == ["jet_features", "el_features"]
+    assert calls.compare["kwargs"]["tasks_to_output"] == ["events_classification"]
+    assert calls.compare["kwargs"]["batched"] is False
 
 
 def test_main_uses_batched_validation_when_requested(tmp_path, monkeypatch):

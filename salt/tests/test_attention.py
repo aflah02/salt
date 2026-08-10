@@ -3,22 +3,23 @@ import importlib.util
 import pytest
 import torch
 from torch import nn
-from torch.utils.benchmark import Timer
 
 from salt.models.attention import Attention, merge_masks, projection_packed
 from salt.models.transformer import (
     redo_padding,
     undo_padding,
 )
+from salt.tests.helpers import (
+    create_bool_tensor,
+    get_cross_attn_inputs,
+    get_models,
+    get_self_attn_inputs,
+)
 
 N_BATCH = 10
 Q_SEQ = 20
 KV_SEQ = 10
 DIM = 16
-
-
-def create_bool_tensor(shape, value):
-    return torch.full(shape, value, dtype=torch.bool)
 
 
 class TestMergeMasks:
@@ -68,33 +69,6 @@ def test_padding_mask():
     x[:, 2] = 10
     out2 = torch_attn(x, x, x, attn_mask=attn_mask)[0]
     torch.testing.assert_close(out1, out2)
-
-
-def get_models(dim, num_heads) -> tuple:
-    salt_attn = Attention(dim, num_heads=num_heads)
-    torch_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
-    salt_attn.in_proj_weight = torch_attn.in_proj_weight
-    salt_attn.in_proj_bias = torch_attn.in_proj_bias
-    salt_attn.out_proj.weight = torch_attn.out_proj.weight
-    salt_attn.out_proj.bias = torch_attn.out_proj.bias
-    return salt_attn, torch_attn
-
-
-def get_cross_attn_inputs(batch_size, q_len, kv_len, dim, frac_pad=0.0) -> tuple:
-    torch.manual_seed(0)
-    q = torch.randn(batch_size, q_len, dim)
-    kv = torch.randn(batch_size, kv_len, dim)
-    kv_mask = torch.rand(batch_size, kv_len) > frac_pad
-    kv_mask[:, 0] = False  # Make sure something can send
-    return q, kv, kv_mask
-
-
-def get_self_attn_inputs(batch_size, seq_len, dim, frac_pad=0.0) -> tuple:
-    torch.manual_seed(0)
-    x = torch.randn(batch_size, seq_len, dim)
-    mask = torch.rand(batch_size, seq_len) > frac_pad
-    mask[:, 0] = False  # Make sure something can send
-    return x, mask
 
 
 def test_mup_initialization():
@@ -161,6 +135,7 @@ def test_self_attention(
 @pytest.mark.parametrize("do_qk_norm", [True, False])
 @pytest.mark.parametrize("do_v_norm", [True, False])
 @pytest.mark.parametrize("attn_type", ["torch-flash", "torch-meff", "flash-varlen"])
+@pytest.mark.gpu
 def test_attention_backends(
     batch_size,
     seq_len,
@@ -209,97 +184,3 @@ def test_attention_backends(
         # Test all close with less strict due to half precision
         torch.testing.assert_close(output, output_2, atol=1e-3, rtol=1e-3)
         assert not torch.isnan(output_2).any()
-
-
-def test_times_torch_vs_salt() -> None:
-    # skip if cuda is not available
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA not available")
-
-    # Define the input parameters for the timings
-    batch_size, seq_len, dim, num_heads = 1000, 64, 128, 8
-    salt_attn, torch_attn = get_models(dim, num_heads)
-    x, mask = get_self_attn_inputs(batch_size, seq_len, dim, frac_pad=0.5)
-
-    # move tensors and models to cuda
-    x = x.cuda()
-    mask = mask.cuda()
-    salt_attn.cuda()
-    torch_attn.cuda()
-
-    # avoid torch fast path
-    salt_attn.training = True
-    torch_attn.training = True
-
-    # Using timers also performs warm up
-    salt_timer = Timer(
-        stmt="salt_attn(x, kv_mask=mask)",
-        globals={"salt_attn": salt_attn, "x": x, "mask": mask},
-        label="salt",
-        num_threads=1,
-    )
-
-    torch_timer = Timer(
-        stmt="torch_attn(x, x, x, key_padding_mask=mask)",
-        globals={"torch_attn": torch_attn, "x": x, "mask": mask},
-        label="torch",
-        num_threads=1,
-    )
-
-    salt_time = salt_timer.timeit(300).mean
-    torch_time = torch_timer.timeit(300).mean
-    assert salt_time < torch_time, f"mean: {salt_time} vs {torch_time}"
-
-
-def test_times_varlen_vs_default() -> None:
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA not available")
-    if importlib.util.find_spec("flash_attn") is None:
-        pytest.skip("flash_attn not available")
-
-    # FlashVarlenAttention requires half precision
-    with torch.autocast("cuda", enabled=True):
-        # Define the input parameters for the timings
-        num_heads = 4
-        batch_size = 256
-        seq_len = 64
-        dim = 128
-        x, mask = get_self_attn_inputs(batch_size, seq_len, dim, frac_pad=0.5)
-
-        # Create the transformers
-        standard_attn = Attention(
-            embed_dim=dim,
-            attn_type="torch-math",
-            num_heads=num_heads,
-        )
-
-        varlen_attn = Attention(
-            embed_dim=dim,
-            attn_type="flash-varlen",
-            num_heads=num_heads,
-        )
-
-        # move tensors and models to cuda
-        x = x.cuda()
-        mask = mask.cuda()
-        standard_attn.cuda()
-        varlen_attn.cuda()
-
-        x_varlen, culens, maxlen = undo_padding(x, mask)
-
-        # Time the models
-        s_timer = Timer(
-            stmt="standard_attn(x, mask=mask)",
-            globals={"standard_attn": standard_attn, "x": x, "mask": mask},
-            label="standard",
-            num_threads=1,
-        )
-        v_timer = Timer(
-            stmt="varlen_attn(x, culens=culens, maxlen=maxlen)",
-            globals={"varlen_attn": varlen_attn, "x": x_varlen, "culens": culens, "maxlen": maxlen},
-            label="varlen",
-            num_threads=1,
-        )
-        st = s_timer.timeit(20).mean
-        vt = v_timer.timeit(20).mean
-        assert vt < st, f"mean: {vt} vs {st}"

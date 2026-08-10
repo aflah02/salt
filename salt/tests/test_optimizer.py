@@ -26,18 +26,6 @@ class TinyModel(nn.Module):
         self.head = nn.Linear(3, 2, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor.
-
-        Returns
-        -------
-        torch.Tensor
-            Output tensor.
-        """
         x = self.linear(x)
         x = self.norm(x)
         x = self.head(x)
@@ -45,15 +33,7 @@ class TinyModel(nn.Module):
 
 
 def _set_all_grads(model: nn.Module, value: float = 0.01) -> None:
-    """Populate gradients for all trainable parameters.
-
-    Parameters
-    ----------
-    model : nn.Module
-        Model whose parameters should receive gradients.
-    value : float, optional
-        Constant gradient value.
-    """
+    """Populate gradients for all trainable parameters."""
     for p in model.parameters():
         if p.requires_grad:
             p.grad = torch.full_like(p, value)

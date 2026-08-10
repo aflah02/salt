@@ -134,7 +134,11 @@ exclude = '^salt/tests/.*\.py$'
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "CRITICAL"
-filterwarnings = ["ignore::DeprecationWarning"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::lightning.fabric.utilities.warnings.PossibleUserWarning",
+]
+markers = ["gpu: requires CUDA (and flash_attn where noted)"]
 
 [tool.coverage.report]
 omit = ["**/mup_utils/*"]

@@ -11,32 +11,11 @@ from salt.models.transformer import (
     Transformer,
     change_attn_backends,
 )
+from salt.tests.helpers import get_cross_attn_inputs, get_self_attn_inputs
 
 N_BATCH = 10
 Q_SEQ = 20
-KV_SEQ = 10
 DIM = 16
-
-
-def create_bool_tensor(shape, value):
-    return torch.full(shape, value, dtype=torch.bool)
-
-
-def get_cross_attn_inputs(batch_size, q_len, kv_len, dim, frac_pad=0.0) -> tuple:
-    torch.manual_seed(0)
-    q = torch.randn(batch_size, q_len, dim)
-    kv = torch.randn(batch_size, kv_len, dim)
-    kv_mask = torch.rand(batch_size, kv_len) > frac_pad
-    kv_mask[:, 0] = False  # Make sure something can send
-    return q, kv, kv_mask
-
-
-def get_self_attn_inputs(batch_size, seq_len, dim, frac_pad=0.0) -> tuple:
-    torch.manual_seed(0)
-    x = torch.randn(batch_size, seq_len, dim)
-    mask = torch.rand(batch_size, seq_len) > frac_pad
-    mask[:, 0] = False  # Make sure something can send
-    return x, mask
 
 
 @pytest.mark.parametrize("ls_init", [None, 0.1])
