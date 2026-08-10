@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor, nn
 
+from salt.models.transformer import DecoderLayer
 from salt.stypes import Tensors
 from salt.utils.tensor_utils import flatten_tensor_dict, masked_softmax
 
@@ -134,3 +135,98 @@ class NodeQueryGAP(Pooling):
 
         # concatenate pooled nodes and queries
         return torch.cat([pooled_nodes, pooled_queries], dim=-1)
+
+
+class ClassAttentionPooling(Pooling):
+    """Class-attention pooling (ParT / DeParT / CaiT style).
+
+    A single learned class token cross-attends to the encoded constituents
+    through one or more :class:`~salt.models.transformer.DecoderLayer` blocks
+    (cross-attention only, no self-attention, matching the CMS b-hive ParT
+    class-attention head), and the resulting token is used as the pooled global
+    representation. Following b-hive/CaiT, the class token is prepended to the
+    keys/values of every block, so it is always a valid (non-padded) key and
+    fully padded jets stay NaN-free (and ONNX-safe).
+
+    Parameters
+    ----------
+    input_size : int
+        Dimensionality of each constituent embedding (and of the class token).
+    num_layers : int, optional
+        Number of cross-attention blocks. The default is ``1``.
+    ls_init : float | None, optional
+        Initial LayerScale value for each block. The default is ``1e-3``.
+    dense_kwargs : dict | None, optional
+        Keyword args for the block's :class:`~salt.models.transformer.GLU` FFN.
+    attn_kwargs : dict | None, optional
+        Keyword args for the block's :class:`~salt.models.transformer.Attention`.
+    norm : str, optional
+        Normalization class name. The default is ``"LayerNorm"``.
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        num_layers: int = 1,
+        ls_init: float | None = 1e-3,
+        dense_kwargs: dict | None = None,
+        attn_kwargs: dict | None = None,
+        norm: str = "LayerNorm",
+    ):
+        super().__init__()
+        self.input_size = input_size
+        # a single class token, initialised like the transformer register tokens
+        self.class_token = nn.Parameter(torch.normal(torch.zeros((1, input_size)), std=1e-4))
+        self.layers = nn.ModuleList([
+            DecoderLayer(
+                embed_dim=input_size,
+                ls_init=ls_init,
+                dense_kwargs=dense_kwargs,
+                attn_kwargs=attn_kwargs,
+                norm=norm,
+                self_attn=False,
+            )
+            for _ in range(num_layers)
+        ])
+
+    def forward(
+        self,
+        x: Tensors,
+        pad_mask: dict | None = None,
+    ) -> Tensor:
+        """Apply class-attention pooling.
+
+        Parameters
+        ----------
+        x : Tensors
+            Mapping from input stream name to tensor with shape ``[B, L_i, D]``.
+            All non-``"objects"`` entries are concatenated along the sequence
+            dimension to form the ``[B, L, D]`` set of constituents.
+        pad_mask : dict | None, optional
+            Mapping from stream name to padding mask ``[B, L_i]`` (``True`` =
+            padded). Masks are concatenated along the sequence dimension. The
+            default is ``None``.
+
+        Returns
+        -------
+        Tensor
+            Pooled tensor of shape ``[B, D]``.
+        """
+        x_flat = flatten_tensor_dict(x, exclude=["objects"])
+
+        mask = None
+        if pad_mask is not None:
+            mask = torch.cat(list(pad_mask.values()), dim=1)
+
+        q = self.class_token.expand(x_flat.shape[0], -1, -1)
+        for layer in self.layers:
+            # prepend the class token to the keys/values (b-hive/CaiT class attention),
+            # so it is always a valid key and fully padded jets stay NaN-free
+            kv = torch.cat([q, x_flat], dim=1)
+            kv_mask = None
+            if mask is not None:
+                valid = torch.zeros((mask.shape[0], 1), dtype=mask.dtype, device=mask.device)
+                kv_mask = torch.cat([valid, mask], dim=1)
+            q = layer(q, kv=kv, kv_mask=kv_mask)
+
+        return q.squeeze(1)

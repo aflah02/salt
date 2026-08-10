@@ -3,6 +3,7 @@ import torch
 
 from salt.models.attention import EdgeAttention
 from salt.models.transformer import EncoderLayer, NormResidual, Transformer
+from salt.utils.edge_features import calculate_edge_features, check_edge_config
 from salt.utils.inputs import get_random_mask
 
 
@@ -233,6 +234,38 @@ def test_transformer_depart_style() -> None:
     # fully padded jets must still be NaN-free (registers guard the softmax)
     out, _ = net(x, edge_x=edge_x, pad_mask=get_random_mask(bs, seq_len, p_valid=0.0))
     assert not torch.isnan(out).any()
+
+
+def test_edge_features_relative_angular_matches_absolute() -> None:
+    # dR/kt use angular differences, so jet-relative deta/dphi must give the same result
+    # as absolute eta/phi (the constant jet-axis offset cancels in the difference)
+    torch.manual_seed(0)
+    batch_size, seq_len = 2, 6
+    feats = ["dR", "kt", "z", "isSelfLoop"]
+
+    pt = torch.rand(batch_size, seq_len) + 0.5
+    eta = torch.randn(batch_size, seq_len)
+    phi = torch.randn(batch_size, seq_len)
+    jet_eta, jet_phi = 0.3, -0.7
+    deta, dphi = eta - jet_eta, phi - jet_phi
+
+    check_edge_config(feats, ["pt", "eta", "phi"])
+    e_abs = calculate_edge_features(
+        torch.stack([pt, eta, phi], dim=-1), {"pt": 0, "eta": 1, "phi": 2}, feats
+    )
+    check_edge_config(feats, ["pt", "deta", "dphi"])
+    e_rel = calculate_edge_features(
+        torch.stack([pt, deta, dphi], dim=-1), {"pt": 0, "deta": 1, "dphi": 2}, feats
+    )
+
+    assert e_abs.shape == (batch_size, seq_len, seq_len, len(feats))
+    assert torch.allclose(e_abs, e_rel, atol=1e-6)
+    assert not torch.isnan(e_rel).any()
+
+
+def test_edge_features_missing_angular_raises() -> None:
+    with pytest.raises(ValueError, match="dR"):
+        check_edge_config(["dR"], ["pt"])
 
 
 def test_edge_updates():

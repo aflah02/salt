@@ -446,6 +446,10 @@ class DecoderLayer(nn.Module):
         Keyword args for :class:`Attention`.
     norm_type : str, optional
         One of ``{"pre", "post", "none"}``. The default is ``"pre"``.
+    self_attn : bool, optional
+        Whether to include the self-attention step before cross-attention. If ``False``,
+        the layer is cross-attention only (as in ParT/CaiT class attention). The default
+        is ``True``.
     """
 
     def __init__(
@@ -457,6 +461,7 @@ class DecoderLayer(nn.Module):
         dense_kwargs: dict | None = None,
         attn_kwargs: dict | None = None,
         norm_type: str = "pre",
+        self_attn: bool = True,
     ):
         super().__init__()
 
@@ -468,12 +473,14 @@ class DecoderLayer(nn.Module):
 
         # Attributes
         self.embed_dim = embed_dim
+        self.use_self_attn = self_attn
 
         # Submodules
         residual = partial(
             NormResidual, norm=norm, ls_init=ls_init, drop_path=drop_path, norm_type=norm_type
         )
-        self.self_attn = residual(Attention(embed_dim=embed_dim, **attn_kwargs))
+        if self.use_self_attn:
+            self.self_attn = residual(Attention(embed_dim=embed_dim, **attn_kwargs))
         self.cross_attn = residual(Attention(embed_dim=embed_dim, **attn_kwargs))
         self.dense = residual(GLU(embed_dim, **dense_kwargs))
 
@@ -503,7 +510,8 @@ class DecoderLayer(nn.Module):
         Tensor
             Output tensor of shape ``[B, L, D]``.
         """
-        x = self.self_attn(x, kv_mask=mask)
+        if self.use_self_attn:
+            x = self.self_attn(x, kv_mask=mask)
         x = self.cross_attn(x, kv=kv, kv_mask=kv_mask)
         return self.dense(x)
 

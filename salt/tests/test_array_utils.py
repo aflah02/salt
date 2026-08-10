@@ -60,7 +60,13 @@ def test_check_edge_config_unknown_feature():
 
 def test_check_edge_config_missing_variable():
     with pytest.raises(ValueError, match="required for edge features"):
+        check_edge_config(["kt"], ["eta", "phi"])
+
+
+def test_check_edge_config_missing_angular():
+    with pytest.raises(ValueError, match="require either"):
         check_edge_config(["dR"], ["pt"])
+    check_edge_config(["dR"], ["deta", "dphi"])
 
 
 def test_calculate_edge_features_shape_and_finite():
