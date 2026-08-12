@@ -1,3 +1,4 @@
+import ctypes
 import operator
 import os
 import time
@@ -27,6 +28,13 @@ from salt.utils.mask_utils import build_target_masks
 
 # Disable HDF5 file locking (errno 524 on Lustre/GPFS) before any h5py open.
 os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
+
+
+def _malloc_trim() -> None:
+    # Return heap pages freed by closing HDF5 handles back to the OS (glibc only, best-effort).
+    with suppress(OSError, AttributeError):
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+
 
 # Define the available operators
 OPERATORS = {
@@ -224,6 +232,13 @@ class SaltDataset(Dataset):
         Transformations to apply to the data, by default None.
     multi_target: list[dict] | None, optional
         Config flag to allow multi target based on condition set, by default None.
+    h5_reopen_every : int, optional
+        Reopen the HDF5 handle (and ``malloc_trim``) every this many reads per worker
+        to bound memory growth from accumulated VDS source caches. ``0`` disables it.
+        Overridden by the ``SALT_H5_REOPEN_EVERY`` env var. By default 100.
+    h5_rdcc_nbytes : int | None, optional
+        Raw-data chunk-cache size per dataset passed to :func:`h5py.File`. ``None`` uses
+        the h5py default. Overridden by the ``SALT_H5_RDCC_NBYTES`` env var. By default None.
 
     Raises
     ------
@@ -256,6 +271,8 @@ class SaltDataset(Dataset):
         recover_malformed: bool = False,
         transforms: list[Callable] | None = None,
         multi_target: list[dict] | None = None,
+        h5_reopen_every: int = 100,
+        h5_rdcc_nbytes: int | None = None,
     ):
         super().__init__()
         # check labels have been configured
@@ -315,6 +332,13 @@ class SaltDataset(Dataset):
 
         self._h5: h5py.File | None = None
         self._pid: int | None = None
+
+        # VDS memory knobs (env vars override config for ops toggling / backward-compat).
+        self._read_count = 0
+        env_reopen = os.environ.get("SALT_H5_REOPEN_EVERY")
+        self._reopen_every = int(env_reopen) if env_reopen is not None else int(h5_reopen_every)
+        env_rdcc = os.environ.get("SALT_H5_RDCC_NBYTES")
+        self._rdcc_nbytes = int(env_rdcc) if env_rdcc is not None else h5_rdcc_nbytes
 
         self.num_inputs = num_inputs
         self.non_finite_to_num = non_finite_to_num
@@ -512,7 +536,10 @@ class SaltDataset(Dataset):
             if self._h5 is not None and self._h5.id.valid:
                 self._h5.close()
 
-            self._h5 = h5py.File(self.filename, "r", libver="latest")
+            open_kwargs: dict[str, Any] = {"libver": "latest"}
+            if self._rdcc_nbytes is not None:
+                open_kwargs["rdcc_nbytes"] = self._rdcc_nbytes
+            self._h5 = h5py.File(self.filename, "r", **open_kwargs)
             self._pid = pid
 
     def _setup(self):
@@ -603,6 +630,17 @@ class SaltDataset(Dataset):
         # that each worker has its own copy of the file to prevent
         if not self._is_setup:
             self._setup()
+
+        # Reopen + malloc_trim periodically; close alone frees to glibc, not back to the OS.
+        if self._reopen_every and self._read_count and self._read_count % self._reopen_every == 0:
+            if self._h5 is not None and self._h5.id.valid:
+                self._h5.close()
+            self._h5 = None
+            self._is_setup = False
+            self._setup()
+            _malloc_trim()
+        self._read_count += 1
+
         # loop over input types
         for input_name in self.input_map:
             # load data (inputs + labels) for this input type

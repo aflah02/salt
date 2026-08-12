@@ -1018,3 +1018,53 @@ def test_objects_excluded_from_pad_masks(tmp_path):
     # Sanity: tracks (which have no 'valid' field in this fixture) carry no
     # pad_mask either — we just need to confirm 'objects' is excluded.
     assert "objects" not in pad_masks
+
+
+def test_salt_dataset_periodic_reopen():
+    f = get_mock_file()[0]
+    norm_dict = {}
+    variables = {"jets": ["pt", "eta"], "tracks": ["d0"]}
+    dataset = SaltDataset(f, norm_dict, variables, "train", h5_reopen_every=2)
+    assert dataset._reopen_every == 2
+
+    dataset[0:10]  # first read triggers setup, no reopen yet
+    first_handle = dataset._h5
+
+    # several reads spanning multiple reopen cycles must keep returning data
+    for i in range(10, 60, 10):
+        dataset[i : i + 10]
+
+    # a reopen must have happened: the handle object was replaced and the
+    # original handle was closed (this is what releases the VDS source caches)
+    assert dataset._h5 is not first_handle
+    assert not first_handle.id.valid
+    assert dataset._read_count >= 6
+
+
+def test_salt_dataset_reopen_disabled():
+    f = get_mock_file()[0]
+    norm_dict = {}
+    variables = {"jets": ["pt", "eta"], "tracks": ["d0"]}
+    dataset = SaltDataset(f, norm_dict, variables, "train", h5_reopen_every=0)
+    assert dataset._reopen_every == 0
+
+    dataset[0:10]
+    handle = dataset._h5
+    for i in range(10, 60, 10):
+        dataset[i : i + 10]
+
+    # with reopening disabled the handle must never be replaced
+    assert dataset._h5 is handle
+    assert handle.id.valid
+
+
+def test_salt_dataset_h5_knobs_env_override(monkeypatch):
+    monkeypatch.setenv("SALT_H5_REOPEN_EVERY", "5")
+    monkeypatch.setenv("SALT_H5_RDCC_NBYTES", "0")
+    f = get_mock_file()[0]
+    norm_dict = {}
+    variables = {"jets": ["pt", "eta"], "tracks": ["d0"]}
+    # env vars must win over the constructor defaults
+    dataset = SaltDataset(f, norm_dict, variables, "train", h5_reopen_every=100)
+    assert dataset._reopen_every == 5
+    assert dataset._rdcc_nbytes == 0
