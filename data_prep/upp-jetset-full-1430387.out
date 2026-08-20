@@ -1,0 +1,276 @@
+============================================================
+ATLAS JETSET FULL UPP PREPROCESSING
+============================================================
+Job ID:       1430387
+Node:         jpbo-062-24.jupiter.internal
+Architecture: aarch64
+CPUs:         32
+
+Image:
+  /e/fscratch/reformo/khan27_jupiter/containers/salt-arm64-astral-fa.sif
+
+Config:
+  /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/configs/open-dataset-jupiter-full.yaml
+
+Raw data:
+  /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw
+
+Output:
+  /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output
+============================================================
+
+=== Checking image ===
+Image: OK
+
+=== Checking config ===
+Config: OK
+
+=== Checking CERN JetSet files ===
+-rw-r--r--+ 1 khan27 datasets 2.9G Aug 20 10:58 /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw/mc-flavtag-ttbar-small.h5
+-rw-r--r--+ 1 khan27 datasets 13G Aug 20 11:03 /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw/mc-flavtag-ttbar-medium.h5
+-rw-r--r--+ 1 khan27 datasets 85G Aug 20 12:10 /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw/mc-flavtag-ttbar-large.h5
+
+All three input files present.
+
+=== Checking that this is the FULL config ===
+Full dataset config check: OK
+
+=== Software versions ===
+Architecture: aarch64
+Python UPP: 0.3.1
+UPP version check: OK
+
+=== Parsing preprocessing config ===
+
+CONFIG PARSED SUCCESSFULLY
+base_dir:    /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full
+ntuple_dir:  /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw
+out_fname:   /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_train.h5
+
+Components:
+  lowpt_ttbar_bjets         13,000,000 jets
+  lowpt_ttbar_cjets         13,000,000 jets
+  lowpt_ttbar_ujets         26,000,000 jets
+  lowpt_ttbar_taujets       1,500,000 jets
+
+Total requested train jets: 53,500,000
+
+============================================================
+STARTING FULL UPP PREPROCESSING
+Splits: train + val + test
+Plotting: disabled
+============================================================
+
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     ---------------------------------------------- train -----------------------------------------------           
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     Starting preprocessing...                                                                                      
+INFO     Start time: 2026-08-20 15:54:35                                                                                
+INFO     Copying config to                                                                                              
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_train.yaml 
+INFO     Checking input samples sizes...                                                                                
+INFO     Checking sample ttbar...                                                                                       
+INFO     mc-flavtag-ttbar-*.h5                                                                                          
+ERROR    Can't extract DSID from pattern: mc-flavtag-ttbar-*.h5                                                         
+ERROR    Can't extract r-tag from pattern: mc-flavtag-ttbar-*.h5                                                        
+INFO     Available jets in given groups:                                                                                
+                                                                                                                        
+INFO     Group: ttbar                                                                                                   
+INFO       - Sample: mc-flavtag-ttbar-*.h5, N_Jets: 199,752,328                                                         
+INFO     ------------------------------------------- Writing PDFs -------------------------------------------           
+INFO     Estimating PDFs using 25,000,000 jets...                                                                       
+INFO     Estimating lowpt_ttbar_bjets PDF using 25,000,000 samples...                                                   
+INFO     Estimated 73,628,314 lowpt_ttbar_bjets jets available - 25,000,000 requested(199,752,328 in ttbar)             
+INFO     Estimating lowpt_ttbar_cjets PDF using 25,000,000 samples...                                                   
+INFO     Estimated 16,989,574 lowpt_ttbar_cjets jets available - 25,000,000 requested(199,752,328 in ttbar)             
+INFO     Estimating lowpt_ttbar_ujets PDF using 25,000,000 samples...                                                   
+INFO     Estimated 92,513,209 lowpt_ttbar_ujets jets available - 25,000,000 requested(199,752,328 in ttbar)             
+INFO     Estimating lowpt_ttbar_taujets PDF using 25,000,000 samples...                                                 
+INFO     Estimated 7,127,787 lowpt_ttbar_taujets jets available - 25,000,000 requested(199,752,328 in ttbar)            
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/hists/                             
+INFO     ---------------------------------------- Running resampling ----------------------------------------           
+INFO     Resampling method: countup                                                                                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_bjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 14,316,889 lowpt_ttbar_bjets jets available - 13,000,000 requested(199,752,328 in ttbar)             
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_cjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 13,595,959 lowpt_ttbar_cjets jets available - 13,000,000 requested(199,752,328 in ttbar)             
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_ujets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 28,569,883 lowpt_ttbar_ujets jets available - 26,000,000 requested(199,752,328 in ttbar)             
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_taujets...                                      
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 1,651,824 lowpt_ttbar_taujets jets available - 1,500,000 requested(199,752,328 in ttbar)             
+INFO     Running over region lowpt...                                                                                   
+INFO     lowpt_ttbar_bjets usampling ratio is 1.000, with 12,997,509/13,000,000 written jets. Jets are upsampled at most
+         3 times                                                                                                        
+INFO     lowpt_ttbar_cjets usampling ratio is 1.000, with 13,000,000/13,000,000 written jets. Jets are upsampled at most
+         1 times                                                                                                        
+INFO     lowpt_ttbar_ujets usampling ratio is 1.000, with 25,997,356/26,000,000 written jets. Jets are upsampled at most
+         5 times                                                                                                        
+INFO     lowpt_ttbar_taujets usampling ratio is 1.051, with 1,426,671/1,500,000 written jets. Jets are upsampled at most
+         6 times                                                                                                        
+INFO     Finished resampling a total of 53,500,000 jets!                                                                
+INFO     Estimated unique jets: 53,421,536                                                                              
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/components/train/                  
+INFO     ----------------------------------------- Running Merging ------------------------------------------           
+INFO     Finished merging 53,500,000 merged jets!                                                                       
+INFO     ------------------------------------- Computing Normalisations -------------------------------------           
+INFO     Finished computing normalisation params on 25,000,000 jets!                                                    
+INFO     Saved norm dict to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/norm_dict.yaml    
+INFO     Saved class dict to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/class_dict.yaml  
+INFO     ------------------------------------- Finished Preprocessing! --------------------------------------           
+INFO     End time: 2026-08-20 16:52:12                                                                                  
+INFO     Elapsed time: 0:57:36                                                                                          
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     ----------------------------------------------- val ------------------------------------------------           
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     Starting preprocessing...                                                                                      
+INFO     Start time: 2026-08-20 16:52:12                                                                                
+INFO     Copying config to                                                                                              
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_val.yaml   
+INFO     Checking input samples sizes...                                                                                
+INFO     Checking sample ttbar...                                                                                       
+INFO     mc-flavtag-ttbar-*.h5                                                                                          
+ERROR    Can't extract DSID from pattern: mc-flavtag-ttbar-*.h5                                                         
+ERROR    Can't extract r-tag from pattern: mc-flavtag-ttbar-*.h5                                                        
+INFO     Available jets in given groups:                                                                                
+                                                                                                                        
+INFO     Group: ttbar                                                                                                   
+INFO       - Sample: mc-flavtag-ttbar-*.h5, N_Jets: 199,752,328                                                         
+INFO     ---------------------------------------- Running resampling ----------------------------------------           
+INFO     Resampling method: countup                                                                                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_bjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 1,427,215 lowpt_ttbar_bjets jets available - 1,300,000 requested(199,752,328 in ttbar)               
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_cjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 1,698,603 lowpt_ttbar_cjets jets available - 1,300,000 requested(199,752,328 in ttbar)               
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_ujets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 2,859,004 lowpt_ttbar_ujets jets available - 2,600,000 requested(199,752,328 in ttbar)               
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_taujets...                                      
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 165,229 lowpt_ttbar_taujets jets available - 150,000 requested(199,752,328 in ttbar)                 
+INFO     Running over region lowpt...                                                                                   
+INFO     lowpt_ttbar_bjets usampling ratio is 1.005, with 1,293,000/1,300,000 written jets. Jets are upsampled at most 4
+         times                                                                                                          
+INFO     lowpt_ttbar_cjets usampling ratio is 1.000, with 1,300,000/1,300,000 written jets. Jets are upsampled at most 1
+         times                                                                                                          
+INFO     lowpt_ttbar_ujets usampling ratio is 1.006, with 2,584,383/2,600,000 written jets. Jets are upsampled at most 5
+         times                                                                                                          
+INFO     lowpt_ttbar_taujets usampling ratio is 1.193, with 125,696/150,000 written jets. Jets are upsampled at most 5  
+         times                                                                                                          
+INFO     Finished resampling a total of 5,350,000 jets!                                                                 
+INFO     Estimated unique jets: 5,303,079                                                                               
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/components/val/                    
+INFO     ----------------------------------------- Running Merging ------------------------------------------           
+INFO     Finished merging 5,350,000 merged jets!                                                                        
+INFO     ------------------------------------- Finished Preprocessing! --------------------------------------           
+INFO     End time: 2026-08-20 17:13:53                                                                                  
+INFO     Elapsed time: 0:21:40                                                                                          
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     ----------------------------------------------- test -----------------------------------------------           
+INFO     ----------------------------------------------------------------------------------------------------           
+INFO     Starting preprocessing...                                                                                      
+INFO     Start time: 2026-08-20 17:13:53                                                                                
+INFO     Copying config to                                                                                              
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_test.yaml  
+INFO     Checking input samples sizes...                                                                                
+INFO     Checking sample ttbar...                                                                                       
+INFO     mc-flavtag-ttbar-*.h5                                                                                          
+ERROR    Can't extract DSID from pattern: mc-flavtag-ttbar-*.h5                                                         
+ERROR    Can't extract r-tag from pattern: mc-flavtag-ttbar-*.h5                                                        
+INFO     Available jets in given groups:                                                                                
+                                                                                                                        
+INFO     Group: ttbar                                                                                                   
+INFO       - Sample: mc-flavtag-ttbar-*.h5, N_Jets: 199,752,328                                                         
+INFO     ---------------------------------------- Running resampling ----------------------------------------           
+INFO     Resampling method: none                                                                                        
+INFO     Checking requested num_jets based on a sampling fraction of 1...                                               
+INFO     Estimated 7,481,530 lowpt_ttbar_bjets jets available - 1,300,000 requested(199,752,328 in ttbar)               
+INFO     Checking requested num_jets based on a sampling fraction of 1...                                               
+INFO     Estimated 1,739,435 lowpt_ttbar_cjets jets available - 1,300,000 requested(199,752,328 in ttbar)               
+INFO     Checking requested num_jets based on a sampling fraction of 1...                                               
+INFO     Estimated 9,818,019 lowpt_ttbar_ujets jets available - 2,600,000 requested(199,752,328 in ttbar)               
+INFO     Checking requested num_jets based on a sampling fraction of 1...                                               
+INFO     Estimated 726,456 lowpt_ttbar_taujets jets available - 150,000 requested(199,752,328 in ttbar)                 
+INFO     Running over region lowpt...                                                                                   
+INFO     lowpt_ttbar_bjets usampling ratio is 1.000, with 1,300,000/1,300,000 written jets. Jets are upsampled at most 1
+         times                                                                                                          
+INFO     lowpt_ttbar_cjets usampling ratio is 1.000, with 1,300,000/1,300,000 written jets. Jets are upsampled at most 1
+         times                                                                                                          
+INFO     lowpt_ttbar_ujets usampling ratio is 1.000, with 2,600,000/2,600,000 written jets. Jets are upsampled at most 1
+         times                                                                                                          
+INFO     lowpt_ttbar_taujets usampling ratio is 1.000, with 150,000/150,000 written jets. Jets are upsampled at most 1  
+         times                                                                                                          
+INFO     Finished resampling a total of 5,350,000 jets!                                                                 
+INFO     Estimated unique jets: 5,350,000                                                                               
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/components/test/                   
+INFO     ----------------------------------------- Running Merging ------------------------------------------           
+INFO     Finished merging 5,350,000 ttbar jets!                                                                         
+INFO     ------------------------------------- Finished Preprocessing! --------------------------------------           
+INFO     End time: 2026-08-20 17:28:26                                                                                  
+INFO     Elapsed time: 0:14:33                                                                                          
+
+============================================================
+UPP FULL PREPROCESSING FINISHED
+Elapsed seconds: 5637
+============================================================
+
+=== Output files ===
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/class_dict.yaml 540 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/norm_dict.yaml 1731 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_test.yaml 2206 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_train.yaml 2206 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/open-dataset-jupiter-full_val.yaml 2206 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_test_ttbar.h5 4258639707 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_train.h5 21709119126 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_val.h5 2171167612 bytes
+
+=== Checking SALT-required outputs ===
+-rw-r--r--+ 1 khan27 reformo 21G Aug 20 16:49 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_train.h5
+-rw-r--r--+ 1 khan27 reformo 2.1G Aug 20 17:13 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_val.h5
+-rw-r--r--+ 1 khan27 reformo 1.7K Aug 20 16:52 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/norm_dict.yaml
+-rw-r--r--+ 1 khan27 reformo 540 Aug 20 16:52 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/class_dict.yaml
+
+=== Checking test output ===
+WARNING: pp_output_test.h5 was not found.
+
+=== Checking processed HDF5 schema ===
+
+======================================================================
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_train.h5
+======================================================================
+jets:   (53500000,)
+tracks: (53500000, 40)
+GN2 variable check: OK
+
+======================================================================
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_val.h5
+======================================================================
+jets:   (5350000,)
+tracks: (5350000, 40)
+GN2 variable check: OK
+
+ALL PROCESSED HDF5 FILES PASSED
+
+============================================================
+FULL JETSET PREPROCESSING PASSED
+============================================================
+
+Training:
+-rw-r--r--+ 1 khan27 reformo 21G Aug 20 16:49 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_train.h5
+
+Validation:
+-rw-r--r--+ 1 khan27 reformo 2.1G Aug 20 17:13 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/pp_output_val.h5
+
+Normalisation:
+-rw-r--r--+ 1 khan27 reformo 1.7K Aug 20 16:52 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/norm_dict.yaml
+
+Classes:
+-rw-r--r--+ 1 khan27 reformo 540 Aug 20 16:52 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full/output/class_dict.yaml
+
+These files are ready to be referenced from GN2_open_data.yaml.
+

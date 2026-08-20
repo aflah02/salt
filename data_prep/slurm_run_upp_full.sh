@@ -125,25 +125,29 @@ echo
 
 echo "=== Checking that this is the FULL config ==="
 
-for FILE in "${FILES[@]}"; do
-    if ! grep -q "$FILE" "$CONFIG"; then
-        echo "ERROR:"
-        echo "Full config does not reference:"
-        echo "  $FILE"
-        exit 1
-    fi
-done
+if ! grep -q 'mc-flavtag-ttbar-\*\.h5' "$CONFIG"; then
+    echo "ERROR:"
+    echo "Config does not contain the expected full-dataset glob:"
+    echo '  mc-flavtag-ttbar-*.h5'
+    exit 1
+fi
 
 if grep -q "small-test" "$CONFIG"; then
     echo "ERROR:"
     echo "Config still contains 'small-test'."
-    echo "Do not run the full job with the smoke-test output directory."
+    exit 1
+fi
+
+if ! grep -q \
+    '/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/full' \
+    "$CONFIG"; then
+    echo "ERROR:"
+    echo "Config does not point to the full preprocessing directory."
     exit 1
 fi
 
 echo "Full dataset config check: OK"
 echo
-
 
 # ============================================================
 # Container / UPP check
@@ -306,10 +310,13 @@ echo
 
 echo "=== Checking test output ==="
 
-if [[ -f "$OUTPUT/pp_output_test.h5" ]]; then
-    ls -lh "$OUTPUT/pp_output_test.h5"
+TEST_FILES=("$OUTPUT"/pp_output_test*.h5)
+
+if (( ${#TEST_FILES[@]} > 0 )) && [[ -e "${TEST_FILES[0]}" ]]; then
+    ls -lh "${TEST_FILES[@]}"
 else
-    echo "WARNING: pp_output_test.h5 was not found."
+    echo "ERROR: No test output found."
+    exit 1
 fi
 
 echo
