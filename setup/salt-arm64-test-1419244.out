@@ -1,0 +1,36 @@
+========================================
+SALT ARM64 GPU TEST
+========================================
+Job ID: 1419244
+Node: jpbo-042-31.jupiter.internal
+Host architecture: aarch64
+Image: /e/fscratch/reformo/khan27_jupiter/containers/salt-arm64-astral-fa.sif
+
+=== Host GPU ===
+GPU 0: NVIDIA GH200 120GB (UUID: GPU-042617b3-a466-032c-5309-0f0b75c6c14a)
+GPU 1: NVIDIA GH200 120GB (UUID: GPU-1ff0ebc3-b4b2-9982-834a-08d6e57aee5a)
+GPU 2: NVIDIA GH200 120GB (UUID: GPU-953f3bef-c8c7-a042-6dd3-d47ef21445fd)
+GPU 3: NVIDIA GH200 120GB (UUID: GPU-0415c3db-c912-0b06-8969-c25a8672195e)
+
+========================================
+CONTAINER
+========================================
+Architecture: aarch64
+Torch: 2.12.1+cu130
+Torch CUDA: 13.0
+CUDA available: True
+Visible GPUs: 4
+FlashAttention: 2.8.3.post1
+SALT: 0.13.0
+
+GPU: NVIDIA GH200 120GB
+GPU capability: (9, 0)
+
+=== Basic CUDA tensor test ===
+Result shape: torch.Size([1024, 1024])
+Device: cuda:0
+GPU tensor test: SUCCESS
+
+========================================
+SALT ARM64 GPU TEST PASSED
+========================================

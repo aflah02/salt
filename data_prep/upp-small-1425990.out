@@ -1,0 +1,97 @@
+============================================================
+JETSET / UPP SMALL-DATASET TEST
+============================================================
+Job ID:     1425990
+Node:       jpbo-012-02.jupiter.internal
+Arch:       aarch64
+Image:      /e/fscratch/reformo/khan27_jupiter/containers/salt-arm64-astral-fa.sif
+Config:     /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/configs/open-dataset-jupiter-small-test.yaml
+
+=== Input data ===
+-rw-r--r--+ 1 khan27 datasets 2.9G Aug 20 10:58 /e/data1/datasets/khan27/jupiter/atlas/jetset/93940/raw/mc-flavtag-ttbar-small.h5
+
+=== UPP version ===
+umami-preprocessing: 0.3.1
+
+=== Starting UPP train preprocessing ===
+INFO     Starting preprocessing...                                                                                      
+INFO     Start time: 2026-08-20 15:12:15                                                                                
+INFO     Copying config to                                                                                              
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/open-dataset-jupiter-small-test
+         _train.yaml                                                                                                    
+INFO     Checking input samples sizes...                                                                                
+INFO     Checking sample ttbar...                                                                                       
+INFO     mc-flavtag-ttbar-small.h5                                                                                      
+ERROR    Can't extract DSID from pattern: mc-flavtag-ttbar-small.h5                                                     
+ERROR    Can't extract r-tag from pattern: mc-flavtag-ttbar-small.h5                                                    
+INFO     Available jets in given groups:                                                                                
+                                                                                                                        
+INFO     Group: ttbar                                                                                                   
+INFO       - Sample: mc-flavtag-ttbar-small.h5, N_Jets: 5,619,475                                                       
+INFO     ------------------------------------------- Writing PDFs -------------------------------------------           
+INFO     Estimating PDFs using 100,000 jets...                                                                          
+INFO     Estimating lowpt_ttbar_bjets PDF using 100,000 samples...                                                      
+INFO     Estimated 2,058,664 lowpt_ttbar_bjets jets available - 100,000 requested(5,619,475 in ttbar)                   
+INFO     Estimating lowpt_ttbar_cjets PDF using 100,000 samples...                                                      
+INFO     Estimated 475,627 lowpt_ttbar_cjets jets available - 100,000 requested(5,619,475 in ttbar)                     
+INFO     Estimating lowpt_ttbar_ujets PDF using 100,000 samples...                                                      
+INFO     Estimated 2,604,816 lowpt_ttbar_ujets jets available - 100,000 requested(5,619,475 in ttbar)                   
+INFO     Estimating lowpt_ttbar_taujets PDF using 100,000 samples...                                                    
+INFO     Estimated 200,867 lowpt_ttbar_taujets jets available - 100,000 requested(5,619,475 in ttbar)                   
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/hists/                       
+INFO     ---------------------------------------- Running resampling ----------------------------------------           
+INFO     Resampling method: countup                                                                                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_bjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 164,722 lowpt_ttbar_bjets jets available - 100,000 requested(5,619,475 in ttbar)                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_cjets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 378,520 lowpt_ttbar_cjets jets available - 100,000 requested(5,619,475 in ttbar)                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_ujets...                                        
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 220,693 lowpt_ttbar_ujets jets available - 200,000 requested(5,619,475 in ttbar)                     
+INFO     Sampling fraction will be chosen automatically for lowpt_ttbar_taujets...                                      
+INFO     Checking requested num_jets based on a sampling fraction of auto...                                            
+INFO     Estimated 55,022 lowpt_ttbar_taujets jets available - 50,000 requested(5,619,475 in ttbar)                     
+INFO     Running over region lowpt...                                                                                   
+INFO     lowpt_ttbar_bjets usampling ratio is 1.007, with 99,283/100,000 written jets. Jets are upsampled at most 3     
+         times                                                                                                          
+INFO     lowpt_ttbar_cjets usampling ratio is 1.000, with 100,000/100,000 written jets. Jets are upsampled at most 1    
+         times                                                                                                          
+INFO     lowpt_ttbar_ujets usampling ratio is 1.008, with 198,371/200,000 written jets. Jets are upsampled at most 3    
+         times                                                                                                          
+INFO     lowpt_ttbar_taujets usampling ratio is 1.232, with 40,584/50,000 written jets. Jets are upsampled at most 5    
+         times                                                                                                          
+INFO     Finished resampling a total of 450,000 jets!                                                                   
+INFO     Estimated unique jets: 438,238                                                                                 
+INFO     Saved to /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/components/train/            
+INFO     ----------------------------------------- Running Merging ------------------------------------------           
+INFO     Finished merging 450,000 merged jets!                                                                          
+INFO     ------------------------------------- Computing Normalisations -------------------------------------           
+INFO     Finished computing normalisation params on 100,000 jets!                                                       
+INFO     Saved norm dict to                                                                                             
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/norm_dict.yaml                 
+INFO     Saved class dict to                                                                                            
+         /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/class_dict.yaml                
+INFO     ------------------------------------- Finished Preprocessing! --------------------------------------           
+INFO     End time: 2026-08-20 15:13:31                                                                                  
+INFO     Elapsed time: 0:01:15                                                                                          
+
+============================================================
+UPP SMALL TEST FINISHED
+============================================================
+
+=== Output ===
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/class_dict.yaml 523 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/norm_dict.yaml 1735 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/open-dataset-jupiter-small-test_train.yaml 2192 bytes
+/e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/pp_output_train.h5 176831010 bytes
+
+=== Expected SALT preprocessing products ===
+-rw-r--r--+ 1 khan27 reformo  523 Aug 20 15:13 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/class_dict.yaml
+-rw-r--r--+ 1 khan27 reformo 1.7K Aug 20 15:13 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/norm_dict.yaml
+-rw-r--r--+ 1 khan27 reformo 169M Aug 20 15:13 /e/fscratch/reformo/khan27_jupiter/jetset-93940-preprocessing/small-test/output/pp_output_train.h5
+
+============================================================
+UPP SMALL TEST PASSED
+============================================================
