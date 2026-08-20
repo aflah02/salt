@@ -1,0 +1,266 @@
+Bootstrap: docker
+From: nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
+
+%labels
+    Author khan27
+    Application SALT
+    Architecture arm64
+    CUDA 13.0
+    PyTorch 2.12.0
+    FlashAttention 2.8.3
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:$PATH
+
+    export UV_NO_CACHE=1
+
+%post
+    set -eux
+
+    export DEBIAN_FRONTEND=noninteractive
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+
+    export CUDA_HOME=/usr/local/cuda
+    export PATH=/usr/local/cuda/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+    export UV_BREAK_SYSTEM_PACKAGES=1
+    export UV_NO_CACHE=1
+
+    # ---------------------------------------------------------
+    # Basic build/runtime packages
+    # ---------------------------------------------------------
+
+    apt-get update
+
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-dev \
+        python3-pip \
+        git \
+        ca-certificates \
+        wget \
+        curl \
+        build-essential \
+        ninja-build \
+        jq \
+        pkg-config \
+        h5utils
+
+    rm -rf /var/lib/apt/lists/*
+
+    python3 --version
+    uname -m
+    nvcc --version
+
+    # ---------------------------------------------------------
+    # uv + isolated Python environment
+    # ---------------------------------------------------------
+
+    # Install uv without touching Ubuntu's apt-managed pip
+    curl -LsSf https://astral.sh/uv/install.sh \
+        | env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+
+    uv --version
+
+    # Create an isolated Python environment for SALT
+    uv venv --python /usr/bin/python3 /opt/venv
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:$PATH
+
+    python --version
+    which python
+
+    # ---------------------------------------------------------
+    # ARM64 PyTorch 2.12 + CUDA 13
+    #
+    # PyTorch publishes native aarch64 cu130 wheels.
+    # PyPI remains the fallback for normal dependencies.
+    # ---------------------------------------------------------
+
+    uv pip install \
+        --index https://download.pytorch.org/whl/cu130 \
+        --default-index https://pypi.org/simple \
+        "torch==2.12.0"
+
+    python3 - <<'PY'
+import platform
+import torch
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("Torch CUDA:", torch.version.cuda)
+
+assert platform.machine() in ("aarch64", "arm64")
+assert torch.__version__.startswith("2.12.0")
+PY
+
+    # ---------------------------------------------------------
+    # FlashAttention build prerequisites
+    # ---------------------------------------------------------
+
+    uv pip install \
+        packaging \
+        psutil \
+        ninja \
+        wheel \
+        setuptools \
+        einops
+
+    # ---------------------------------------------------------
+    # FlashAttention 2.8.3
+    #
+    # Do NOT use SALT's x86_64 wheel.
+    # Compile natively for GH200 / Hopper compute capability 9.0.
+    #
+    # Keep parallelism deliberately modest because this build
+    # runs on a shared login node.
+    # ---------------------------------------------------------
+
+    cd /opt
+
+    git clone \
+        --branch v2.8.3 \
+        --depth 1 \
+        --recurse-submodules \
+        https://github.com/Dao-AILab/flash-attention.git
+
+    cd /opt/flash-attention
+
+    export FLASH_ATTENTION_FORCE_BUILD=TRUE
+    export FLASH_ATTN_CUDA_ARCHS=90
+
+    export MAX_JOBS=4
+    export NVCC_THREADS=2
+
+    uv pip install \
+        --no-build-isolation \
+        .
+
+    # ---------------------------------------------------------
+    # SALT
+    # ---------------------------------------------------------
+
+    cd /
+
+    git clone \
+        --branch main \
+        --depth 1 \
+        https://github.com/umami-hep/salt.git \
+        /salt
+
+    cd /salt
+
+    # Record exactly which SALT revision went into the image.
+    git rev-parse HEAD | tee /opt/SALT_COMMIT
+
+    # Same dependency selection used by SALT's official image:
+    # dev dependency group + muP optional dependencies.
+    #
+    # Explicitly expose the ARM64 CUDA PyTorch index so that
+    # torch==2.12.0 stays on the CUDA/aarch64 build.
+    uv pip install \
+        --index https://download.pytorch.org/whl/cu130 \
+        --default-index https://pypi.org/simple \
+        --group dev \
+        ".[muP]"
+
+    # Match official SALT image: editable package without
+    # re-resolving all dependencies.
+    uv pip install \
+        -e . \
+        --no-deps
+
+    # ---------------------------------------------------------
+    # Build-time sanity tests
+    # ---------------------------------------------------------
+
+    python3 - <<'PY'
+import platform
+import torch
+import salt
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("CUDA used to build PyTorch:", torch.version.cuda)
+print("SALT:", salt.__file__)
+
+assert platform.machine() in ("aarch64", "arm64")
+assert torch.__version__.startswith("2.12.0")
+PY
+
+    # Remove source/build material we no longer need.
+    rm -rf /opt/flash-attention
+
+%test
+    set -eu
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:$PATH
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+
+    echo "=== Architecture ==="
+    uname -m
+    test "$(uname -m)" = "aarch64"
+
+    echo
+    echo "=== Python environment ==="
+    which python
+    python --version
+
+    test "$(which python)" = "/opt/venv/bin/python"
+
+    echo
+    echo "=== PyTorch ==="
+    python - <<'PY'
+import platform
+import torch
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("PyTorch CUDA:", torch.version.cuda)
+print("CUDA available during build:", torch.cuda.is_available())
+
+assert platform.machine() == "aarch64"
+assert torch.__version__.startswith("2.12.0")
+assert torch.version.cuda is not None
+PY
+
+    echo
+    echo "=== FlashAttention ==="
+    python - <<'PY'
+import flash_attn
+
+print("FlashAttention import: SUCCESS")
+print("FlashAttention:", flash_attn.__version__)
+print("FlashAttention location:", flash_attn.__file__)
+PY
+
+    echo
+    echo "=== SALT ==="
+    python - <<'PY'
+import salt
+
+print("SALT import: SUCCESS")
+print("SALT location:", salt.__file__)
+PY
+
+    echo
+    echo "=== SALT commit ==="
+    cat /opt/SALT_COMMIT
+
+    echo
+    echo "=== Container build tests PASSED ==="
+
+%runscript
+    exec /bin/bash "$@"
