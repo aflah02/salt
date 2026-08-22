@@ -17,7 +17,7 @@ import torch
 from torch import BoolTensor, Tensor, nn
 
 import salt.models.layernorm as layernorms
-from salt.models.attention import ATTN_TYPES, Attention, EdgeAttention
+from salt.models.attention import ATTN_TYPES, VARLEN_ATTN_TYPES, Attention, EdgeAttention
 from salt.stypes import Tensors
 from salt.utils.tensor_utils import redo_padding, undo_padding
 
@@ -38,7 +38,8 @@ def change_attn_backends(module: nn.Module, backend: str) -> None:
     module : nn.Module
         Root module to traverse.
     backend : str
-        Backend name, one of ``{"torch-math", "torch-flash", "torch-meff", "flash-varlen"}``.
+        Backend name, one of ``{"torch-math", "torch-flash", "torch-meff", "flash-varlen",
+        "flash3-varlen"}``.
     """
     if isinstance(module, Transformer):
         module.set_backend(backend)
@@ -532,7 +533,8 @@ class Transformer(nn.Module):
         Normalization style (class name from :mod:`salt.models.layernorm`).
         The default is ``"LayerNorm"``.
     attn_type : str, optional
-        Attention backend, one of ``{"torch-math", "torch-flash", "torch-meff", "flash-varlen"}``.
+        Attention backend, one of ``{"torch-math", "torch-flash", "torch-meff", "flash-varlen",
+        "flash3-varlen"}``.
         The default is ``"torch-math"``.
     do_final_norm : bool, optional
         Whether to apply a final normalization layer. The default is ``True``.
@@ -761,7 +763,7 @@ class Transformer(nn.Module):
             )
 
         # If using the varlen backend, pack the sequence and store the cumulative lengths
-        if self.attn_type == "flash-varlen":
+        if self.attn_type in VARLEN_ATTN_TYPES:
             x, kwargs["culens"], kwargs["maxlen"] = undo_padding(x, mask)
 
         # Run through the main transformer encoder layers
@@ -780,7 +782,7 @@ class Transformer(nn.Module):
             x = self.out_norm(x)
 
         # If using the varlen backend, unpack the sequence
-        if self.attn_type == "flash-varlen":
+        if self.attn_type in VARLEN_ATTN_TYPES:
             x = redo_padding(x, mask)
 
         # Optionally drop the registers from the output

@@ -11,6 +11,7 @@ from salt.callbacks.maskformer_metrics import MaskformerMetrics
 from salt.callbacks.performancewriter import PerformanceWriter
 from salt.callbacks.predictionwriter import PredictionWriter
 from salt.callbacks.saveconfig import SaveConfigCallback
+from salt.callbacks.throughput import ThroughputLogger
 from salt.callbacks.weight_logger import WeightLoggerCallback
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "PerformanceWriter",
     "PredictionWriter",
     "SaveConfigCallback",
+    "ThroughputLogger",
     "WeightLoggerCallback",
 ]
