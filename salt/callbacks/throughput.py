@@ -1,10 +1,10 @@
 """End-to-end training throughput logging."""
 
+import json
+import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-import json
 from pathlib import Path
-import time
 from typing import Any
 
 import torch
