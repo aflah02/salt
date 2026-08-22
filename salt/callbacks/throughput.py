@@ -93,10 +93,12 @@ class ThroughputLogger(Callback):
         if not self._active:
             return
 
+        # trainer.log_dir performs a distributed broadcast, so every rank
+        # must evaluate it in the same collective order.
+        out_dir = Path(trainer.log_dir) if self.dir_path is None else Path(self.dir_path)
+
         if not self._writer:
             return
-
-        out_dir = Path(trainer.log_dir) if self.dir_path is None else Path(self.dir_path)
         out_dir.mkdir(parents=True, exist_ok=True)
         self.path = out_dir / "throughput.jsonl"
         self.path.write_text("")
