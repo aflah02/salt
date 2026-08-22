@@ -14,7 +14,7 @@ EXPECTED_FA3_VERSION = "3.0.0"
 
 def check_environment() -> None:
     """Check wheel provenance and every GPU visible to the job."""
-    from flash_attn_3 import flash_attn_interface
+    import flash_attn_interface
 
     installed = version("flash-attn-3")
     print("Architecture:", platform.machine())
