@@ -126,12 +126,17 @@ trainer:
 
   default_root_dir: /e/fscratch/reformo/khan27_jupiter/salt-runs/GN2_open_data
 
-  logger: false
+  logger:
+    class_path: lightning.pytorch.loggers.comet.CometLogger
+    init_args:
+      project: GN2-open-data
 
   callbacks:
     - class_path: salt.callbacks.Checkpoint
       init_args:
         monitor_loss: val/jets_classification_loss
+
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
 
     - class_path: lightning.pytorch.callbacks.TQDMProgressBar
       init_args:

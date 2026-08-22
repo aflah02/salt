@@ -24,6 +24,25 @@ set -euo pipefail
 
 jutil env activate -p reformo
 
+# ------------------------------------------------------------
+# Comet
+#
+# Important:
+#   Do NOT set logger online:false in the YAML.
+#   Lightning 2.6.1 converts that into disabled=True.
+#
+# COMET_START_ONLINE=0 tells the Comet SDK itself to create an
+# offline experiment, bypassing that Lightning behaviour.
+#
+# The API key is kept present because SALT checks for it; if it
+# is missing SALT itself injects online=False.
+# ------------------------------------------------------------
+
+source "$HOME/.config/comet/env"
+
+export APPTAINERENV_COMET_API_KEY="$COMET_API_KEY"
+export APPTAINERENV_COMET_START_ONLINE=0
+
 MACHINE=$(cat /etc/FZJ/systemname)
 USER_MACHINE="${USER}_${MACHINE}"
 
