@@ -47,3 +47,27 @@ sbatch GN2_slurm_configs/run_gn2_open_data_fa3.slurm
 Compare its full-step throughput and validation metrics with the existing FA2 run.
 FA3 compatibility does not guarantee a speedup for GN2's short sequences and head
 dimension 32.
+
+## Compare FA2 and FA3 throughput
+
+The FA3 image contains both implementations. The Slurm scripts default to FA3 but accept
+`ATTENTION_VERSION=fa2`, selecting the matching config while keeping the image, data,
+batch size, DDP layout, and throughput instrumentation identical:
+
+```bash
+sbatch --export=ALL,ATTENTION_VERSION=fa2 \
+    GN2_slurm_configs/run_gn2_open_data_fa3_smoke.slurm
+
+sbatch --export=ALL,ATTENTION_VERSION=fa3 \
+    GN2_slurm_configs/run_gn2_open_data_fa3_smoke.slurm
+```
+
+Each config excludes the first 10 batches as warmup and emits a measurement every 50
+batches, plus the partial window at the end of an epoch. Metrics are printed to the Slurm
+output, sent to the Lightning logger when one is enabled, and always saved as
+`throughput.jsonl` in the run directory.
+
+The primary metric is `train/throughput/samples_per_sec`, the global sample rate across
+all GPUs. `train/throughput/batches_per_sec` is the aggregate rate of per-rank batches,
+while `train/throughput/steps_per_sec` is the synchronized DDP dataloader-step rate. Timing
+includes data loading, forward, backward, optimizer work, and DDP synchronization.

@@ -21,8 +21,10 @@ from salt.callbacks import (
     GradientLoggerCallback,
     PerformanceWriter,
     SaveConfigCallback,
+    ThroughputLogger,
     WeightLoggerCallback,
 )
+from salt.callbacks.throughput import get_batch_size
 from salt.callbacks.saveconfig import get_attr
 
 
@@ -143,6 +145,62 @@ def test_performance_writer_skips_outside_validate(tmp_path):
     cb.setup(trainer, TinyModule(), stage="fit")
     cb.on_validation_epoch_end(trainer, TinyModule())
     assert cb.path.read_text() == ""
+
+
+# --------------------------- ThroughputLogger ---------------------------
+
+
+def test_get_batch_size_from_salt_batch():
+    batch = (
+        {
+            "jets": torch.zeros(3, 2),
+            "tracks": torch.zeros(3, 40, 19),
+        },
+        {"tracks": torch.zeros(3, 40, dtype=torch.bool)},
+        {"jets": {"flavour_label": torch.zeros(3, dtype=torch.long)}},
+    )
+    assert get_batch_size(batch) == 3
+
+
+def test_throughput_logger_writes_global_rates(tmp_path):
+    class FakeLogger:
+        def __init__(self):
+            self.metrics = []
+
+        def log_metrics(self, metrics, step):
+            self.metrics.append((metrics, step))
+
+    logger = FakeLogger()
+    trainer = make_fake_trainer(
+        log_dir=str(tmp_path),
+        logger=logger,
+        world_size=4,
+        global_step=0,
+        current_epoch=0,
+        strategy=SimpleNamespace(root_device=torch.device("cpu"), barrier=lambda _name: None),
+    )
+    callback = ThroughputLogger(log_every_n_steps=2, warmup_steps=0, std_out=False)
+    callback.setup(trainer, TinyModule(), stage="fit")
+    callback.on_train_start(trainer, TinyModule())
+
+    batch = ({"jets": torch.zeros(3, 2)}, {}, {})
+    trainer.global_step = 1
+    callback.on_train_batch_end(trainer, TinyModule(), None, batch, 0)
+    trainer.global_step = 2
+    callback.on_train_batch_end(trainer, TinyModule(), None, batch, 1)
+
+    records = callback.path.read_text().splitlines()
+    assert len(records) == 1
+    record = json.loads(records[0])
+    assert record["world_size"] == 4
+    assert record["window_batches_per_device"] == 2
+    assert record["window_samples_per_device"] == 6
+    assert record["train/throughput/global_batch_size"] == 12
+    assert record["train/throughput/samples_per_sec"] > 0
+    assert record["train/throughput/batches_per_sec"] > 0
+    assert record["train/throughput/steps_per_sec"] > 0
+    assert len(logger.metrics) == 1
+    assert logger.metrics[0][1] == 2
 
 
 # --------------------------- ConfusionMatrixCallback ---------------------------

@@ -38,17 +38,24 @@ IMAGE="$FSCRATCH/$USER_MACHINE/containers/salt-arm64-astral-fa3.sif"
 
 DATA="$FSCRATCH/$USER_MACHINE/jetset-93940-preprocessing/full/output"
 
-RUNROOT="$FSCRATCH/$USER_MACHINE/salt-runs/GN2_open_data_FA3"
+ATTENTION_VERSION="${ATTENTION_VERSION:-fa3}"
+if [[ "$ATTENTION_VERSION" != "fa2" && "$ATTENTION_VERSION" != "fa3" ]]; then
+    echo "ERROR: ATTENTION_VERSION must be fa2 or fa3, got: $ATTENTION_VERSION"
+    exit 1
+fi
+ATTENTION_LABEL="${ATTENTION_VERSION^^}"
 
-CONFIG="$REPO/salt/configs/GN2/GN2_open_data_jupiter_fa3.yaml"
+RUNROOT="$FSCRATCH/$USER_MACHINE/salt-runs/GN2_open_data_${ATTENTION_LABEL}"
+
+CONFIG="$REPO/salt/configs/GN2/GN2_open_data_jupiter_${ATTENTION_VERSION}.yaml"
 
 LOG_DIR="$REPO/logs/GN2_logs"
 
-RUN_NAME="GN2_open_data_FA3_smoke-${SLURM_JOB_ID}"
+RUN_NAME="GN2_open_data_${ATTENTION_LABEL}_smoke-${SLURM_JOB_ID}"
 
 RUN_DIR="$RUNROOT/$RUN_NAME"
 
-RESOLVED_CONFIG="$LOG_DIR/gn2-fa3-smoke-${SLURM_JOB_ID}-resolved.yaml"
+RESOLVED_CONFIG="$LOG_DIR/gn2-${ATTENTION_VERSION}-smoke-${SLURM_JOB_ID}-resolved.yaml"
 
 
 mkdir -p "$RUNROOT"
@@ -64,7 +71,7 @@ export NUMEXPR_NUM_THREADS=1
 
 
 echo "============================================================"
-echo "GN2 OPEN DATA FA3 - JUPITER 4-GPU SMOKE TEST"
+echo "GN2 OPEN DATA $ATTENTION_LABEL - JUPITER 4-GPU SMOKE TEST"
 echo "============================================================"
 
 echo "Job ID:        $SLURM_JOB_ID"
@@ -84,6 +91,8 @@ echo
 
 echo "Config:"
 echo "  $CONFIG"
+echo "Attention backend:"
+echo "  $ATTENTION_LABEL"
 echo
 
 echo "Dataset:"
@@ -207,23 +216,27 @@ echo
 
 
 # ============================================================
-# Execute the FA3 kernel through Salt with GN2 dimensions
+# Execute the FA3 kernel through Salt with GN2 dimensions when requested
 # ============================================================
 
 echo "=== Flash Attention 3 GN2 preflight ==="
 
-srun \
-    --ntasks=1 \
-    --gres=gpu:4 \
-    apptainer exec \
-        --nv \
-        --cleanenv \
-        --pwd /salt \
-        --env PYTHONPATH=/salt \
-        --bind /e/scratch:/e/scratch \
-        --bind /e/fscratch:/e/fscratch \
-        "$IMAGE" \
-        python /salt/GN2_slurm_configs/check_fa3_gn2.py
+if [[ "$ATTENTION_VERSION" == "fa3" ]]; then
+    srun \
+        --ntasks=1 \
+        --gres=gpu:4 \
+        apptainer exec \
+            --nv \
+            --cleanenv \
+            --pwd /salt \
+            --env PYTHONPATH=/salt \
+            --bind /e/scratch:/e/scratch \
+            --bind /e/fscratch:/e/fscratch \
+            "$IMAGE" \
+            python /salt/GN2_slurm_configs/check_fa3_gn2.py
+else
+    echo "Skipping the FA3-only kernel preflight for the FA2 comparison run."
+fi
 
 echo
 
@@ -334,7 +347,7 @@ ELAPSED=$((END_TIME - START_TIME))
 
 echo
 echo "============================================================"
-echo "GN2 OPEN DATA FA3 4-GPU SMOKE TEST PASSED"
+echo "GN2 OPEN DATA $ATTENTION_LABEL 4-GPU SMOKE TEST PASSED"
 echo "============================================================"
 echo
 echo "Training elapsed seconds: $ELAPSED"
@@ -359,6 +372,24 @@ find "$RUN_DIR" \
     -printf '%p %s bytes\n' \
     | sort
 
+echo
+
+
+# ============================================================
+# Check throughput logs
+# ============================================================
+
+echo "=== Throughput ==="
+
+THROUGHPUT_FILE="$RUN_DIR/throughput.jsonl"
+if [[ ! -s "$THROUGHPUT_FILE" ]]; then
+    echo "ERROR: throughput log was not written:"
+    echo "  $THROUGHPUT_FILE"
+    exit 1
+fi
+
+echo "Throughput records: $(wc -l < "$THROUGHPUT_FILE")"
+tail -n 5 "$THROUGHPUT_FILE"
 echo
 
 
@@ -404,7 +435,7 @@ echo
 # ============================================================
 
 echo "============================================================"
-echo "ALL GN2 4-GPU SMOKE CHECKS PASSED"
+echo "ALL GN2 $ATTENTION_LABEL 4-GPU SMOKE CHECKS PASSED"
 echo "============================================================"
 echo
 echo "Slurm stdout:"
@@ -415,6 +446,9 @@ echo "  $LOG_DIR/gn2-fa3-smoke-${SLURM_JOB_ID}.err"
 echo
 echo "Resolved config:"
 echo "  $RESOLVED_CONFIG"
+echo
+echo "Throughput log:"
+echo "  $THROUGHPUT_FILE"
 echo
 echo "Checkpoints:"
 echo "  $CKPT_DIR"

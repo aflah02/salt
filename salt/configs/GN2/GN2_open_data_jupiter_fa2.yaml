@@ -1,4 +1,4 @@
-name: GN2_open_data_FA3
+name: GN2_open_data_FA2
 
 model:
   lrs_config:
@@ -24,7 +24,7 @@ model:
           num_layers: 4
           embed_dim: *embed_dim
           out_dim: &out_dim 128
-          attn_type: flash3-varlen
+          attn_type: flash-varlen
           norm: LayerNorm
           do_final_norm: True
           dense_kwargs:
@@ -125,7 +125,7 @@ trainer:
   devices: 1
   precision: 16-mixed
 
-  default_root_dir: /e/fscratch/reformo/khan27_jupiter/salt-runs/GN2_open_data_FA3
+  default_root_dir: /e/fscratch/reformo/khan27_jupiter/salt-runs/GN2_open_data_FA2
 
   logger: false
 
@@ -147,3 +147,4 @@ trainer:
     - class_path: lightning.pytorch.callbacks.ModelSummary
       init_args:
         max_depth: 2
+
