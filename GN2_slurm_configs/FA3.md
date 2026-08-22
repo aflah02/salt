@@ -10,20 +10,16 @@ sequence lengths, head dimension, or zero-dropout requirement is not satisfied.
 The definition installs the Astral aarch64 CUDA 13.0 / PyTorch 2.12 FA2 and FA3 wheels
 side by side and clones `https://github.com/aflah02/salt.git` into `/salt`.
 
-To build the PR branch before merging:
-
 ```bash
 cd /e/scratch/reformo/${USER}_jupiter/salt
 
 apptainer build \
     --fakeroot \
-    --build-arg SALT_REF=feature/flash-attention-3 \
     "$FSCRATCH/${USER}_jupiter/containers/salt-arm64-astral-fa3.sif" \
     setup/salt-arm64-astral-fa3.def
 ```
 
-After merging, omit `--build-arg SALT_REF=...`; the image defaults to the fork's `main`
-branch. `/opt/SALT_COMMIT` records the exact commit baked into the image.
+`/opt/SALT_COMMIT` records the exact commit baked into the image.
 
 ## Validate before the full run
 

@@ -26,7 +26,7 @@ except (ImportError, OSError):
     _flash_attn_2_func = None
 
 try:
-    from flash_attn_3 import flash_attn_interface as _flash_attn_3_interface
+    import flash_attn_interface as _flash_attn_3_interface
 
     _flash_attn_3_func = _flash_attn_3_interface.flash_attn_varlen_func
 except (ImportError, OSError):

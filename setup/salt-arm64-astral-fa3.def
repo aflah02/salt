@@ -12,9 +12,9 @@ From: nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
     CUDA 13.0
     PyTorch 2.12.1
     FlashAttention2 2.8.3.post1
-    FlashAttention3 3.0.0b1
-    FlashAttention3Source b3f437fbcbeb0dd38e838cae418cfec3fb3e8fa9
-    FlashAttentionWheels Astral
+    FlashAttention3 3.0.0
+    FlashAttention2Wheels Astral
+    FlashAttention3Wheels PyTorch
     SaltRepository {{ SALT_REPOSITORY }}
     SaltRef {{ SALT_REF }}
 
@@ -176,32 +176,37 @@ PY
 
     # ---------------------------------------------------------
     # Prebuilt ARM64 Flash Attention 3
-    #
-    # Astral publishes an SM90a wheel matching this image's
-    # aarch64, CUDA 13.0 and PyTorch 2.12 combination.
-    # Keep FA2 installed alongside FA3 for controlled A/B runs.
     # ---------------------------------------------------------
+
+    # Runtime dependencies; numpy also removes the earlier warning.
+    uv pip install numpy einops packaging ninja
 
     uv pip install \
         --no-deps \
-        --index https://wheels.astral.sh/simple/cu130/ \
-        "flash-attn-3==3.0.0b1+cu.13.0.torch.2.12"
+        "https://download.pytorch.org/whl/cu130/flash_attn_3-3.0.0-cp39-abi3-manylinux_2_34_aarch64.whl#sha256=39ec3c28580b547d1721be227dc9803113fc54a30b95cc697e8061db2fc7bb5b"
 
     echo "=== Flash Attention 3 check ==="
 
     python - <<'PY'
+import platform
 from importlib.metadata import version
 
-from flash_attn_3 import flash_attn_interface
+import torch
+import flash_attn_interface
 
-expected = "3.0.0b1+cu.13.0.torch.2.12"
 installed = version("flash-attn-3")
 
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("CUDA:", torch.version.cuda)
 print("Flash Attention 3:", installed)
 print("FA3 varlen function:", flash_attn_interface.flash_attn_varlen_func)
 
-assert installed == expected, (installed, expected)
-assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
+assert platform.machine() == "aarch64"
+assert torch.__version__.startswith("2.12.1")
+assert torch.version.cuda == "13.0"
+assert installed == "3.0.0"
+assert callable(flash_attn_interface.flash_attn_varlen_func)
 PY
 
     # ---------------------------------------------------------
@@ -334,7 +339,7 @@ import flash_attn
 import numpy
 import salt
 import torch
-from flash_attn_3 import flash_attn_interface
+import flash_attn_interface
 
 print("Architecture:", platform.machine())
 print("NumPy:", numpy.__version__)
@@ -351,7 +356,7 @@ assert torch.__version__.startswith("2.12.1")
 assert torch.version.cuda is not None
 assert torch.version.cuda.startswith("13.")
 assert flash_attn.__version__.startswith("2.8.3")
-assert version("flash-attn-3") == "3.0.0b1+cu.13.0.torch.2.12"
+assert version("flash-attn-3") == "3.0.0"
 assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
 PY
 
@@ -410,7 +415,7 @@ PY
 from importlib.metadata import version
 
 import flash_attn
-from flash_attn_3 import flash_attn_interface
+import flash_attn_interface
 
 print("Flash Attention 2 import: SUCCESS")
 print("Flash Attention 2:", flash_attn.__version__)
@@ -420,7 +425,7 @@ print("Flash Attention 3:", version("flash-attn-3"))
 print("FA3 varlen function:", flash_attn_interface.flash_attn_varlen_func)
 
 assert flash_attn.__version__.startswith("2.8.3")
-assert version("flash-attn-3") == "3.0.0b1+cu.13.0.torch.2.12"
+assert version("flash-attn-3") == "3.0.0"
 assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
 PY
 

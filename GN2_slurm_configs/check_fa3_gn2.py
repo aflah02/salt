@@ -7,9 +7,9 @@ import torch
 
 from salt.models.attention import Attention
 from salt.utils.tensor_utils import redo_padding, undo_padding
+import flash_attn_interface
 
-
-EXPECTED_FA3_VERSION = "3.0.0b1+cu.13.0.torch.2.12"
+EXPECTED_FA3_VERSION = "3.0.0"
 
 
 def check_environment() -> None:
