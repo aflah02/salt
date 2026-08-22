@@ -1,0 +1,480 @@
+Bootstrap: docker
+From: nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
+
+%arguments
+    SALT_REPOSITORY=https://github.com/aflah02/salt.git
+    SALT_REF=main
+
+%labels
+    Author khan27
+    Application SALT
+    Architecture arm64
+    CUDA 13.0
+    PyTorch 2.12.1
+    FlashAttention2 2.8.3.post1
+    FlashAttention3 3.0.0b1
+    FlashAttention3Source b3f437fbcbeb0dd38e838cae418cfec3fb3e8fa9
+    FlashAttentionWheels Astral
+    SaltRepository {{ SALT_REPOSITORY }}
+    SaltRef {{ SALT_REF }}
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:${PATH}
+
+    export UV_NO_CACHE=1
+    export UV_LINK_MODE=copy
+
+    export MPLBACKEND=Agg
+    export MPLCONFIGDIR=/tmp/matplotlib
+
+%post
+    set -eux
+
+    export DEBIAN_FRONTEND=noninteractive
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+
+    export UV_NO_CACHE=1
+    export UV_LINK_MODE=copy
+
+    # ---------------------------------------------------------
+    # Basic build/runtime packages
+    #
+    # Avoid openssh-client / krb5-user here because JUPITER's
+    # restricted fakeroot mode cannot create system groups.
+    # ---------------------------------------------------------
+
+    apt-get update
+
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-dev \
+        python3-tk \
+        git \
+        ca-certificates \
+        wget \
+        curl \
+        build-essential \
+        cmake \
+        ninja-build \
+        jq \
+        pkg-config \
+        h5utils
+
+    rm -rf /var/lib/apt/lists/*
+
+    echo "=== Base environment ==="
+    python3 --version
+    uname -m
+    nvcc --version
+
+    test "$(uname -m)" = "aarch64"
+
+    # ---------------------------------------------------------
+    # uv
+    #
+    # Install standalone uv. Do not touch Ubuntu's apt-managed
+    # pip installation.
+    # ---------------------------------------------------------
+
+    curl -LsSf https://astral.sh/uv/install.sh \
+        | env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+
+    uv --version
+
+    # ---------------------------------------------------------
+    # Isolated Python environment
+    # ---------------------------------------------------------
+
+    uv venv \
+        --python /usr/bin/python3 \
+        /opt/venv
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:${PATH}
+
+    echo "=== Python venv ==="
+    which python
+    python --version
+
+    test "$(which python)" = "/opt/venv/bin/python"
+
+    # ---------------------------------------------------------
+    # ARM64 PyTorch 2.12.1 + CUDA 13.0
+    #
+    # This exact combination was tested directly on JUPITER:
+    #
+    #   aarch64
+    #   torch 2.12.1+cu130
+    #   torch.version.cuda == 13.0
+    # ---------------------------------------------------------
+
+    uv pip install \
+        "torch==2.12.1" \
+        --index https://download.pytorch.org/whl/cu130
+
+    echo "=== PyTorch check ==="
+
+    python - <<'PY'
+import platform
+import torch
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("PyTorch CUDA:", torch.version.cuda)
+
+assert platform.machine() == "aarch64"
+assert torch.__version__.startswith("2.12.1")
+assert torch.version.cuda is not None
+assert torch.version.cuda.startswith("13.")
+PY
+
+    # ---------------------------------------------------------
+    # Prebuilt ARM64 FlashAttention
+    #
+    # Use Astral's prebuilt CUDA 13 / Torch 2.12 wheel instead
+    # of compiling FlashAttention from source.
+    #
+    # This exact wheel was tested successfully on JUPITER:
+    #
+    # flash-attn==2.8.3.post1+cu.13.0.torch.2.12
+    # ---------------------------------------------------------
+
+    uv pip install einops
+
+    uv pip install \
+        --no-deps \
+        --index https://wheels.astral.sh/simple/cu130/ \
+        "flash-attn==2.8.3.post1+cu.13.0.torch.2.12"
+
+    echo "=== FlashAttention check ==="
+
+    python - <<'PY'
+import platform
+import torch
+import flash_attn
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("CUDA:", torch.version.cuda)
+print("FlashAttention:", flash_attn.__version__)
+print("FlashAttention location:", flash_attn.__file__)
+
+assert platform.machine() == "aarch64"
+assert flash_attn.__version__.startswith("2.8.3")
+PY
+
+    # ---------------------------------------------------------
+    # Prebuilt ARM64 Flash Attention 3
+    #
+    # Astral publishes an SM90a wheel matching this image's
+    # aarch64, CUDA 13.0 and PyTorch 2.12 combination.
+    # Keep FA2 installed alongside FA3 for controlled A/B runs.
+    # ---------------------------------------------------------
+
+    uv pip install \
+        --no-deps \
+        --index https://wheels.astral.sh/simple/cu130/ \
+        "flash-attn-3==3.0.0b1+cu.13.0.torch.2.12"
+
+    echo "=== Flash Attention 3 check ==="
+
+    python - <<'PY'
+from importlib.metadata import version
+
+from flash_attn_3 import flash_attn_interface
+
+expected = "3.0.0b1+cu.13.0.torch.2.12"
+installed = version("flash-attn-3")
+
+print("Flash Attention 3:", installed)
+print("FA3 varlen function:", flash_attn_interface.flash_attn_varlen_func)
+
+assert installed == expected, (installed, expected)
+assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
+PY
+
+    # ---------------------------------------------------------
+    # SALT source
+    # ---------------------------------------------------------
+
+    cd /
+
+    git init /salt
+    git -C /salt remote add origin "{{ SALT_REPOSITORY }}"
+    git -C /salt fetch --depth 1 origin "{{ SALT_REF }}"
+    git -C /salt checkout --detach FETCH_HEAD
+
+    cd /salt
+
+    # Save the exact SALT commit included in this image.
+    git rev-parse HEAD | tee /opt/SALT_COMMIT
+
+    echo "=== SALT upstream Torch pin ==="
+    grep 'torch==' pyproject.toml
+
+    # ---------------------------------------------------------
+    # ARM64 compatibility patch
+    #
+    # SALT currently pins torch==2.12.0.
+    #
+    # Astral's prebuilt ARM64 FlashAttention combination that
+    # we verified works uses Torch 2.12.1, so patch SALT's
+    # dependency pin inside this image only.
+    # ---------------------------------------------------------
+
+    sed -i \
+        's/torch==2\.12\.0/torch==2.12.1/g' \
+        pyproject.toml
+
+    echo "=== SALT patched Torch pin ==="
+    grep 'torch==' pyproject.toml
+
+    # ---------------------------------------------------------
+    # py-lap-solver ARM64 workaround
+    #
+    # py-lap-solver 0.1.4 uses the older
+    # scikit-build-core configuration syntax.
+    # Build it with scikit-build-core 0.7.1 and explicitly
+    # provide its build dependencies because build isolation
+    # is disabled.
+    # ---------------------------------------------------------
+
+    uv pip install \
+        "scikit-build-core==0.7.1" \
+        "pybind11>=2.10" \
+        "pyproject-metadata" \
+        "pathspec"
+
+    echo "=== py-lap-solver build prerequisites ==="
+
+    python - <<'PY'
+import scikit_build_core
+import pybind11
+import pyproject_metadata
+import pathspec
+
+print("scikit-build-core:", scikit_build_core.__version__)
+print("pybind11:", pybind11.__version__)
+print("pyproject_metadata import: OK")
+print("pathspec import: OK")
+PY
+
+    echo "=== Building py-lap-solver ==="
+
+    uv pip install \
+        --no-build-isolation \
+        "py-lap-solver==0.1.4"
+
+    echo "=== py-lap-solver check ==="
+
+    python - <<'PY'
+import platform
+import py_lap_solver
+
+print("Architecture:", platform.machine())
+print("py-lap-solver import: SUCCESS")
+print("py-lap-solver location:", py_lap_solver.__file__)
+
+assert platform.machine() == "aarch64"
+PY
+
+    # ---------------------------------------------------------
+    # SALT dependencies
+    #
+    # Mirror the official SALT image:
+    #
+    #   - dev dependency group
+    #   - muP optional dependencies
+    #
+    # Do NOT request SALT's [flash] extra because FlashAttention
+    # was installed explicitly above using the ARM64 Astral
+    # wheel.
+    # ---------------------------------------------------------
+
+    uv pip install \
+        --index https://download.pytorch.org/whl/cu130 \
+        --default-index https://pypi.org/simple \
+        --index-strategy unsafe-best-match \
+        --group dev \
+        ".[muP]"
+
+    # ---------------------------------------------------------
+    # SALT editable installation
+    #
+    # Same basic approach as the official SALT container:
+    # dependencies are already resolved, so don't resolve again.
+    # ---------------------------------------------------------
+
+    uv pip install \
+        -e . \
+        --no-deps
+
+    # ---------------------------------------------------------
+    # Final build-time checks
+    # ---------------------------------------------------------
+
+    echo "=== Final environment check ==="
+
+    python - <<'PY'
+from importlib.metadata import version
+import platform
+
+import flash_attn
+import numpy
+import salt
+import torch
+from flash_attn_3 import flash_attn_interface
+
+print("Architecture:", platform.machine())
+print("NumPy:", numpy.__version__)
+print("PyTorch:", torch.__version__)
+print("PyTorch CUDA:", torch.version.cuda)
+print("Flash Attention 2:", flash_attn.__version__)
+print("Flash Attention 2 location:", flash_attn.__file__)
+print("Flash Attention 3:", version("flash-attn-3"))
+print("FA3 varlen function:", flash_attn_interface.flash_attn_varlen_func)
+print("SALT location:", salt.__file__)
+
+assert platform.machine() == "aarch64"
+assert torch.__version__.startswith("2.12.1")
+assert torch.version.cuda is not None
+assert torch.version.cuda.startswith("13.")
+assert flash_attn.__version__.startswith("2.8.3")
+assert version("flash-attn-3") == "3.0.0b1+cu.13.0.torch.2.12"
+assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
+PY
+
+    echo "=== Installed SALT commit ==="
+    cat /opt/SALT_COMMIT
+
+
+%test
+    set -eu
+
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/local/cuda/bin:${PATH}
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+
+    echo "========================================"
+    echo "SALT ARM64 FA3 CONTAINER TEST"
+    echo "========================================"
+
+    echo
+    echo "=== Architecture ==="
+
+    uname -m
+    test "$(uname -m)" = "aarch64"
+
+    echo
+    echo "=== Python environment ==="
+
+    which python
+    python --version
+
+    test "$(which python)" = "/opt/venv/bin/python"
+
+    echo
+    echo "=== PyTorch ==="
+
+    python - <<'PY'
+import platform
+import torch
+
+print("Architecture:", platform.machine())
+print("PyTorch:", torch.__version__)
+print("PyTorch CUDA:", torch.version.cuda)
+print("CUDA available during container test:", torch.cuda.is_available())
+
+assert platform.machine() == "aarch64"
+assert torch.__version__.startswith("2.12.1")
+assert torch.version.cuda is not None
+assert torch.version.cuda.startswith("13.")
+PY
+
+    echo
+    echo "=== Flash Attention 2 and 3 ==="
+
+    python - <<'PY'
+from importlib.metadata import version
+
+import flash_attn
+from flash_attn_3 import flash_attn_interface
+
+print("Flash Attention 2 import: SUCCESS")
+print("Flash Attention 2:", flash_attn.__version__)
+print("Flash Attention 2 location:", flash_attn.__file__)
+print("Flash Attention 3 import: SUCCESS")
+print("Flash Attention 3:", version("flash-attn-3"))
+print("FA3 varlen function:", flash_attn_interface.flash_attn_varlen_func)
+
+assert flash_attn.__version__.startswith("2.8.3")
+assert version("flash-attn-3") == "3.0.0b1+cu.13.0.torch.2.12"
+assert hasattr(flash_attn_interface, "flash_attn_varlen_func")
+PY
+
+    echo
+    echo "=== SALT ==="
+
+    python - <<'PY'
+import salt
+
+print("SALT import: SUCCESS")
+print("SALT location:", salt.__file__)
+PY
+
+    echo
+    echo "=== SALT CLI ==="
+
+    which salt
+    salt --help >/dev/null
+
+    echo "SALT CLI: SUCCESS"
+
+    echo
+    echo "=== SALT commit ==="
+
+    cat /opt/SALT_COMMIT
+
+    echo
+    echo "========================================"
+    echo "FA3 CONTAINER BUILD TESTS PASSED"
+    echo "========================================"
+
+    echo
+    echo "=== Tkinter ==="
+
+    python - <<'PY'
+import tkinter
+print("Tkinter import: SUCCESS")
+print("Tk version:", tkinter.TkVersion)
+PY
+
+    echo
+    echo "=== UPP ==="
+
+    python - <<'PY'
+import importlib.metadata as m
+import upp
+
+print("umami-preprocessing:", m.version("umami-preprocessing"))
+print("UPP import: SUCCESS")
+PY
+
+    preprocess --help >/dev/null
+    echo "UPP CLI: SUCCESS"
+
+
+%runscript
+    exec /bin/bash "$@"

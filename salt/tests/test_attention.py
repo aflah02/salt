@@ -134,7 +134,9 @@ def test_self_attention(
 @pytest.mark.parametrize("frac_pad", [0.0, 0.5])
 @pytest.mark.parametrize("do_qk_norm", [True, False])
 @pytest.mark.parametrize("do_v_norm", [True, False])
-@pytest.mark.parametrize("attn_type", ["torch-flash", "torch-meff", "flash-varlen"])
+@pytest.mark.parametrize(
+    "attn_type", ["torch-flash", "torch-meff", "flash-varlen", "flash3-varlen"]
+)
 @pytest.mark.gpu
 def test_attention_backends(
     batch_size,
@@ -148,8 +150,13 @@ def test_attention_backends(
 ) -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-    if importlib.util.find_spec("flash_attn") is None:
+    if attn_type == "flash-varlen" and importlib.util.find_spec("flash_attn") is None:
         pytest.skip("flash_attn not available")
+    if attn_type == "flash3-varlen":
+        if importlib.util.find_spec("flash_attn_3") is None:
+            pytest.skip("flash_attn_3 not available")
+        if torch.cuda.get_device_capability() != (9, 0):
+            pytest.skip("flash_attn_3 wheel requires an SM90 Hopper GPU")
 
     # FlashVarlenAttention requires half precision
     with torch.autocast("cuda", enabled=True):
@@ -174,7 +181,7 @@ def test_attention_backends(
 
         # Switch to the attention backend
         attn.set_backend(attn_type)
-        if attn_type == "flash-varlen":
+        if attn_type in {"flash-varlen", "flash3-varlen"}:
             x_p, culens, maxlen = undo_padding(x, mask)
             output_2 = attn(x_p, mask=mask, culens=culens, maxlen=maxlen)
             output_2 = redo_padding(output_2, mask)
@@ -182,5 +189,41 @@ def test_attention_backends(
             output_2 = attn(x, mask=mask)
 
         # Test all close with less strict due to half precision
-        torch.testing.assert_close(output, output_2, atol=1e-3, rtol=1e-3)
+        tolerance = 3e-2 if attn_type == "flash3-varlen" else 1e-3
+        torch.testing.assert_close(output, output_2, atol=tolerance, rtol=tolerance)
         assert not torch.isnan(output_2).any()
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.gpu
+def test_flash3_varlen_gn2_forward_backward(dtype) -> None:
+    """Exercise FA3 with the GN2 attention dimensions and variable sequence lengths."""
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    if importlib.util.find_spec("flash_attn_3") is None:
+        pytest.skip("flash_attn_3 not available")
+    if torch.cuda.get_device_capability() != (9, 0):
+        pytest.skip("flash_attn_3 wheel requires an SM90 Hopper GPU")
+
+    torch.manual_seed(42)
+    batch_size, seq_len, dim, num_heads = 8, 41, 256, 8
+    lengths = torch.tensor([41, 40, 33, 24, 16, 8, 2, 1], device="cuda")
+    mask = torch.arange(seq_len, device="cuda").unsqueeze(0) >= lengths.unsqueeze(1)
+    x = torch.randn(batch_size, seq_len, dim, device="cuda", requires_grad=True)
+    attn = Attention(dim, num_heads=num_heads, attn_type="flash3-varlen").cuda()
+
+    with torch.autocast("cuda", dtype=dtype):
+        x_p, culens, maxlen = undo_padding(x, mask)
+        output = attn(x_p, culens=culens, maxlen=maxlen)
+        output = redo_padding(output, mask)
+        loss = output.float().square().mean()
+
+    loss.backward()
+
+    assert output.shape == (batch_size, seq_len, dim)
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+    for parameter in attn.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()

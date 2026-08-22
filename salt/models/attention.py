@@ -21,9 +21,16 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 import salt.models.layernorm as layernorms
 
 try:
-    from flash_attn import flash_attn_varlen_qkvpacked_func as _flash_attn_func
-except ImportError:
-    _flash_attn_func = None
+    from flash_attn import flash_attn_varlen_qkvpacked_func as _flash_attn_2_func
+except (ImportError, OSError):
+    _flash_attn_2_func = None
+
+try:
+    from flash_attn_3 import flash_attn_interface as _flash_attn_3_interface
+
+    _flash_attn_3_func = _flash_attn_3_interface.flash_attn_varlen_func
+except (ImportError, OSError):
+    _flash_attn_3_func = None
 
 
 def check_flash_attn() -> str:
@@ -50,7 +57,7 @@ def check_flash_attn() -> str:
             f"GPU '{gpu_name}' with SM {sm_version} is not compatible. "
             "Flash Attention 2 requires SM 8.0 or newer (Ampere+)."
         )
-    if _flash_attn_func is None:
+    if _flash_attn_2_func is None:
         return (
             "Flash attention is required but not found! Please ensure the package is installed "
             "correctly. If not, please install the flash attention package as described in "
@@ -59,7 +66,34 @@ def check_flash_attn() -> str:
     return ""
 
 
-ATTN_TYPES = ["torch-math", "torch-flash", "torch-meff", "flash-varlen"]
+def check_flash_attn_3() -> str:
+    """Check if Flash Attention 3 is available on an SM90 Hopper GPU.
+
+    Returns
+    -------
+    str
+        Empty string if Flash Attention 3 is available, otherwise a reason why not.
+    """
+    if not torch.cuda.is_available():
+        return "No GPU available."
+
+    gpu_name = torch.cuda.get_device_name(0)
+    compute_capability = torch.cuda.get_device_capability(0)
+    if compute_capability != (9, 0):
+        return (
+            f"GPU '{gpu_name}' with compute capability {compute_capability} is not compatible. "
+            "The installed Flash Attention 3 wheel requires an SM90 Hopper GPU."
+        )
+    if _flash_attn_3_func is None:
+        return (
+            "Flash Attention 3 is required but not found. Install the flash-attn-3 "
+            "package built for the active CUDA and PyTorch versions."
+        )
+    return ""
+
+
+VARLEN_ATTN_TYPES = {"flash-varlen", "flash3-varlen"}
+ATTN_TYPES = ["torch-math", "torch-flash", "torch-meff", "flash-varlen", "flash3-varlen"]
 
 
 def merge_masks(
@@ -231,7 +265,7 @@ class Attention(nn.Module):
         Number of attention heads. The default is ``1``.
     attn_type : str, optional
         Backend kernel to use. One of ``{"torch-math", "torch-flash", "torch-meff",
-        "flash-varlen"}``. The default is ``"torch-meff"``.
+        "flash-varlen", "flash3-varlen"}``. The default is ``"torch-meff"``.
     dropout : float, optional
         Dropout rate applied in attention. The default is ``0.0``.
     bias : bool, optional
@@ -298,7 +332,8 @@ class Attention(nn.Module):
         Returns
         -------
         str
-            Effective backend set (may fall back to ``"torch-math"``).
+            Effective backend set. Flash Attention 2 may fall back to ``"torch-math"``;
+            Flash Attention 3 is strict and raises when it cannot be used.
         """
         # Check the attention backend
         self.attn_type = attn_type
@@ -311,7 +346,19 @@ class Attention(nn.Module):
                 )
                 self.attn_type = "torch-math"
             else:
-                self._flash_attn = _flash_attn_func
+                self._flash_attn = _flash_attn_2_func
+        elif self.attn_type == "flash3-varlen":
+            why_not_flash = check_flash_attn_3()
+            if why_not_flash:
+                raise RuntimeError(f"Cannot use flash3-varlen backend. {why_not_flash}")
+            if self.dropout != 0.0:
+                raise ValueError("flash3-varlen does not support attention dropout")
+            if self.head_dim % 8 != 0 or self.head_dim > 256:
+                raise ValueError(
+                    "flash3-varlen requires head_dim to be a multiple of 8 and at most 256, "
+                    f"got {self.head_dim}"
+                )
+            self._flash_attn = _flash_attn_3_func
         return self.attn_type
 
     def reset_parameters(self) -> None:
@@ -363,9 +410,45 @@ class Attention(nn.Module):
                 v = self.v_norm(v)
             qkv = torch.stack([q, k, v], dim=1).to(dtype)
 
-        # Run the flash-varlen backend
-        dropout = self.dropout if self.training else 0.0
-        a_out = self._flash_attn(qkv, culens, maxlen, dropout, softmax_scale=self.scale)
+        # Run the selected variable-length Flash Attention backend.
+        if self.attn_type == "flash3-varlen":
+            if qkv.dtype not in {torch.float16, torch.bfloat16}:
+                raise TypeError(
+                    "flash3-varlen requires float16 or bfloat16 activations, "
+                    f"got {qkv.dtype}"
+                )
+            if not qkv.is_cuda:
+                raise RuntimeError("flash3-varlen requires CUDA tensors")
+            compute_capability = torch.cuda.get_device_capability(qkv.device)
+            if compute_capability != (9, 0):
+                raise RuntimeError(
+                    "flash3-varlen requires an SM90 Hopper GPU, "
+                    f"got compute capability {compute_capability}"
+                )
+            if self.training and self.dropout != 0.0:
+                raise RuntimeError("flash3-varlen does not support attention dropout")
+            if culens.dtype != torch.int32 or not culens.is_cuda:
+                raise TypeError("flash3-varlen requires CUDA int32 cumulative lengths")
+            if not culens.is_contiguous():
+                raise ValueError("flash3-varlen requires contiguous cumulative lengths")
+            if culens.device != qkv.device:
+                raise ValueError("flash3-varlen inputs and cumulative lengths must share a device")
+
+            q, k, v = qkv.unbind(dim=1)
+            a_out = self._flash_attn(
+                q,
+                k,
+                v,
+                culens,
+                culens,
+                maxlen,
+                maxlen,
+                softmax_scale=self.scale,
+                causal=False,
+            )
+        else:
+            dropout = self.dropout if self.training else 0.0
+            a_out = self._flash_attn(qkv, culens, maxlen, dropout, softmax_scale=self.scale)
         a_out = a_out.reshape(-1, self.embed_dim)
 
         # Mix with final linear layer
@@ -443,20 +526,20 @@ class Attention(nn.Module):
         attn_mask : BoolTensor | None, optional
             Attention mask of shape ``[B, L_q, L_kv]`` where allowed positions are ``True``.
         culens : Tensor | None, optional
-            Cumulative lengths for varlen flash. Required for ``attn_type="flash-varlen"``.
+            Cumulative lengths for varlen flash. Required for variable-length backends.
         maxlen : int | None, optional
-            Maximum sequence length. Required for ``attn_type="flash-varlen"``.
+            Maximum sequence length. Required for variable-length backends.
 
         Returns
         -------
         Tensor
             Output of shape ``[B, L_q, D]``.
         """
-        if self.attn_type == "flash-varlen":
-            assert kv is None, "flash-varlen only supports self attention!"
-            assert attn_mask is None, "flash-varlen does not support attention masks!"
-            assert culens is not None, "flash-varlen requires culens!"
-            assert maxlen is not None, "flash-varlen requires maxlen!"
+        if self.attn_type in VARLEN_ATTN_TYPES:
+            assert kv is None, f"{self.attn_type} only supports self attention!"
+            assert attn_mask is None, f"{self.attn_type} does not support attention masks!"
+            assert culens is not None, f"{self.attn_type} requires culens!"
+            assert maxlen is not None, f"{self.attn_type} requires maxlen!"
             return self._flash_forward(x, culens, maxlen)
 
         return self._torch_forward(x, kv, mask, kv_mask, attn_mask)
